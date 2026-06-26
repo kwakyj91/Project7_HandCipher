@@ -2,7 +2,7 @@
 
 ## Context
 
-**HandCipher** is a standalone FPGA system on Basys3 (Artix-7 35T) that lets a user draw English letters (A–Z) on an ILI9341 touchscreen, recognizes them with a custom EMNIST NPU, applies Caesar cipher encryption or decryption, and displays the results on a VGA monitor — all controlled by on-board buttons and switches.
+**HandCipher** — SoC-Based handwritten letter recognition and Caesar cipher system using a custom EMNIST NPU, touchscreen input and VGA output on Basys3.
 
 EMNIST NPU, VGA, TFT-LCD를 각각 AXI Custom IP로 패키징해 Vivado Block Design에 연결하고, MicroBlaze에서 Vitis C 코드로 암호화 로직과 UI를 제어하는 시스템.
 
@@ -69,43 +69,61 @@ EMNIST NPU, VGA, TFT-LCD를 각각 AXI Custom IP로 패키징해 Vivado Block De
 
 ## 전체 파일 구조
 
+각 IP를 독립 Vivado 프로젝트에서 검증한 뒤 Custom IP로 패키징, TOP에서 통합한다.
+
 ```
-Project_7_NPU/
-├── Vivado_NPU/
-│   ├── NPU.xpr
-│   ├── mem/
-│   │   ├── weights_l1.mem
-│   │   ├── weights_l2.mem
-│   │   ├── biases_l1.mem
-│   │   └── biases_l2.mem
-│   ├── NPU.srcs/sources_1/
-│   │   ├── imports/
-│   │   │   └── tft_lcd_sv.sv          (spi, xpt2046 모듈 재사용)
-│   │   └── new/
-│   │       ├── npu_params.vh
-│   │       ├── npu_ip/                (Custom IP #1)
-│   │       │   ├── npu_axi.v          (AXI4-Lite 래퍼)
-│   │       │   ├── npu_ctrl.v         (EMNIST FSM)
-│   │       │   ├── image_buffer.v     (캔버스 BRAM Port B)
-│   │       │   ├── weight_rom_l1.v
-│   │       │   ├── weight_rom_l2.v
-│   │       │   └── bias_rom.v
-│   │       ├── vga_ip/                (Custom IP #2)
-│   │       │   ├── vga_axi.v          (AXI4-Lite 래퍼)
-│   │       │   ├── vga_ctrl.v         (VGA 타이밍 + 문자 렌더러)
-│   │       │   └── font_rom.v
-│   │       └── tft_ip/                (Custom IP #3)
-│   │           ├── tft_axi.v          (AXI4-Lite 래퍼)
-│   │           ├── canvas_display.v   (ILI9341 캔버스 스트리밍)
-│   │           └── draw_canvas.v      (터치 → 캔버스 BRAM Port A)
-│   ├── NPU.srcs/constrs_1/new/
-│   │   └── basys3.xdc
-│   ├── NPU.srcs/sim_1/new/
-│   │   ├── tb_npu_ip.v
-│   │   ├── tb_vga_ip.v
-│   │   └── tb_tft_ip.v
-│   └── setup_project.tcl
-├── Vitis_NPU/
+Project_7_HandCipher/
+├── Vivado/
+│   ├── NPU/                               ← Vivado 프로젝트 #1 (RTL 검증)
+│   │   ├── NPU.xpr
+│   │   ├── mem/
+│   │   │   ├── weights_l1.mem
+│   │   │   ├── weights_l2.mem
+│   │   │   ├── biases_l1.mem
+│   │   │   └── biases_l2.mem
+│   │   └── NPU.srcs/sources_1/new/
+│   │       ├── npu_params.vh              (quantize_export.py 생성)
+│   │       ├── npu_ctrl.v                 (EMNIST 추론 FSM)
+│   │       ├── image_buffer.v             (캔버스 BRAM, 듀얼포트)
+│   │       ├── weight_rom_l1.v
+│   │       ├── weight_rom_l2.v
+│   │       ├── bias_rom.v
+│   │       ├── npu_axi.v                  (AXI4-Lite 래퍼)
+│   │       └── tb_npu.v                   (XSim 검증용)
+│   │
+│   ├── TFT_LCD/                           ← Vivado 프로젝트 #2 (RTL 검증)
+│   │   ├── TFT_LCD.xpr
+│   │   └── TFT_LCD.srcs/sources_1/
+│   │       ├── imports/
+│   │       │   └── tft_lcd_sv.sv          (spi, xpt2046 재사용)
+│   │       └── new/
+│   │           ├── canvas_display.v       (ILI9341 SPI 스트리밍)
+│   │           ├── draw_canvas.v          (터치 좌표 → BRAM Port A)
+│   │           ├── tft_axi.v              (AXI4-Lite 래퍼)
+│   │           └── tb_tft.v               (XSim 검증용)
+│   │
+│   ├── VGA/                               ← Vivado 프로젝트 #3 (RTL 검증)
+│   │   ├── VGA.xpr
+│   │   └── VGA.srcs/sources_1/new/
+│   │       ├── font_rom.v
+│   │       ├── vga_ctrl.v                 (640×480 타이밍 + 문자 렌더러)
+│   │       ├── vga_axi.v                  (AXI4-Lite 래퍼)
+│   │       └── tb_vga.v                   (XSim 검증용)
+│   │
+│   └── TOP/                               ← Vivado 프로젝트 #4 (통합 + 패키징)
+│       ├── TOP.xpr
+│       ├── TOP.srcs/sources_1/new/
+│       │   └── bd/                        (Block Design)
+│       │       MicroBlaze + AXI Interconnect
+│       │       + npu_ip (Custom IP)
+│       │       + tft_ip (Custom IP)
+│       │       + vga_ip (Custom IP)
+│       │       + AXI GPIO (buttons/switches)
+│       ├── TOP.srcs/constrs_1/new/
+│       │   └── basys3.xdc
+│       └── handcipher.xsa                 (Vitis로 내보내기)
+│
+├── Vitis/
 │   └── src/
 │       ├── main.c
 │       ├── caesar.c
@@ -412,37 +430,53 @@ void display_update(u32 base, char *plain, char *cipher, int len,
 3. `quantize_export.py` → .mem 4개 + npu_params.vh
 4. `test_inference.py` → ≥80% 정수 시뮬레이션
 
-### Phase 2 — Custom IP RTL
+### Phase 2 — NPU 프로젝트 (Vivado/NPU/)
 
-5. `npu_ip/`: npu_ctrl.v, weight_rom*.v, bias_rom.v, image_buffer.v, npu_axi.v
-6. `tb_npu_ip.v` → XSim 검증
-7. `vga_ip/`: font_rom.v, vga_ctrl.v, vga_axi.v
-8. `tb_vga_ip.v` → XSim 검증
-9. `tft_ip/`: canvas_display.v, draw_canvas.v, tft_axi.v (spi/xpt2046 재사용)
-10. `tb_tft_ip.v` → XSim 검증
+5. `npu_ctrl.v`, `weight_rom_l1.v`, `weight_rom_l2.v`, `bias_rom.v`, `image_buffer.v`
+6. `npu_axi.v` (AXI4-Lite 슬레이브 래퍼)
+7. `tb_npu.v` → XSim 검증: AXI start → done, RESULT 0~25 확인
+8. **Vivado: Tools → Create and Package New IP** → `npu_ip_v1_0` 패키징
 
-### Phase 3 — Vivado Block Design
+### Phase 3 — TFT_LCD 프로젝트 (Vivado/TFT_LCD/)
 
-11. 각 IP를 Vivado IP 카탈로그에 패키징
-12. Block Design 생성: MicroBlaze + AXI Interconnect + 3 Custom IP + AXI GPIO
-13. 캔버스 BRAM 듀얼포트 연결 (TFT IP ↔ NPU IP)
-14. `basys3.xdc` 핀 제약 추가
-15. 합성 + 구현 → BRAM18 ≤50, WNS ≥ 0
-16. XSA 파일 내보내기 → Vitis로 가져오기
+9. `canvas_display.v`, `draw_canvas.v` (tft_lcd_sv.sv의 spi/xpt2046 재사용)
+10. `tft_axi.v` (AXI4-Lite 슬레이브 래퍼)
+11. `tb_tft.v` → XSim 검증: 터치 시뮬레이션 → BRAM Port A 쓰기 확인
+12. **Vivado: Create and Package New IP** → `tft_ip_v1_0` 패키징
 
-### Phase 4 — Vitis C 코드
+### Phase 4 — VGA 프로젝트 (Vivado/VGA/)
 
-17. Vitis에서 Platform + Application 프로젝트 생성
-18. `caesar.c` / `caesar.h`
-19. `display.c` / `display.h`
-20. `main.c`
-21. 빌드 + Basys3에 다운로드
+13. `font_rom.v`, `vga_ctrl.v` (640×480 @ 60Hz, 문자 렌더러)
+14. `vga_axi.v` (AXI4-Lite 슬레이브 래퍼)
+15. `tb_vga.v` → XSim 검증: AXI 문자 기록 → VGA 픽셀 스트림 확인
+16. **Vivado: Create and Package New IP** → `vga_ip_v1_0` 패키징
 
-### Phase 5 — 하드웨어 검증
+### Phase 5 — TOP 통합 (Vivado/TOP/)
 
-22. 글자 그리기 → OK → VGA 암호화 결과 확인
-23. SW[14]=1 복호화 모드 전환 확인
-24. SW[4:0] 시프트 값 변경 실시간 반영 확인
+17. TOP 프로젝트 생성, IP Repository에 npu_ip / tft_ip / vga_ip 추가
+18. Block Design 생성:
+    - MicroBlaze (32KB BRAM)
+    - AXI Interconnect
+    - npu_ip, tft_ip, vga_ip 각각 Add IP
+    - AXI GPIO (버튼 + 스위치)
+    - 캔버스 BRAM: tft_ip Port A ↔ npu_ip Port B 외부 연결
+19. `basys3.xdc` 핀 제약 추가
+20. 합성 + 구현 → BRAM18 ≤50, WNS ≥ 0 확인
+21. **File → Export → Export Hardware** → `handcipher.xsa` 생성
+
+### Phase 6 — Vitis C 코드 (Vitis/)
+
+22. Vitis에서 handcipher.xsa로 Platform 프로젝트 생성
+23. Application 프로젝트 생성 → `caesar.c` / `caesar.h`
+24. `display.c` / `display.h`
+25. `main.c`
+26. 빌드 + Basys3에 Program Device
+
+### Phase 7 — 하드웨어 검증
+
+27. 글자 그리기 → btnC → VGA 암호화 결과 확인
+28. SW[14]=1 복호화 모드 전환 확인
+29. SW[4:0] 시프트 값 변경 실시간 반영 확인
 
 ---
 
