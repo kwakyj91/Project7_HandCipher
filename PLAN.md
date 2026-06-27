@@ -340,9 +340,12 @@ output        done
 - y ≥ 240, x < 120: OK 버튼 — 녹색 배경 + "OK" 텍스트
 - y ≥ 240, x ≥ 120: CLEAR 버튼 — 빨간색 배경 + "CLR" 텍스트
 
-**캔버스 BRAM Port A (Block Design 레벨 BRAM Generator에 연결):**
+**캔버스 BRAM Port A (최종 TOP Block Design 공유 BRAM):**
 
-- `draw_canvas` → 캔버스 BRAM Port A (1-bit write, addr = row×28+col)
+- `tft_ip`는 캔버스 BRAM을 최종 IP 내부에 소유하지 않음
+- `draw_canvas` → 외부 BRAM Generator Port A 구동 (1-bit write, addr = row×28+col)
+- `npu_ip`는 같은 BRAM Generator의 Port B를 읽어서 28×28 픽셀을 추론 입력으로 사용
+- MicroBlaze는 캔버스 픽셀 784개를 복사하지 않고, `NPU_CTRL.start`만 써서 추론 시작
 - `xpt2046` 모듈: `tft_lcd_sv.sv`에서 그대로 재사용, 50MHz 공급 (100MHz ÷ 2)
 
 **`tft_axi.v` 추가 포트 (AXI4-Lite 슬레이브 외):**
@@ -355,8 +358,8 @@ output        canvas_wea,
 output        canvas_ena
 ```
 
-- IP_TEST에서는 `image_buffer.v`를 내부 인스턴스로 사용
-- TOP Block Design에서는 위 포트를 외부로 노출, BRAM Generator Port A에 배선
+- IP_TEST standalone 검증에서는 `image_buffer.v`를 내부 dual-port BRAM처럼 사용
+- TOP Block Design 통합에서는 `image_buffer.v`를 제거하고, 위 포트를 외부로 노출해 BRAM Generator Port A에 배선
 
 ---
 
