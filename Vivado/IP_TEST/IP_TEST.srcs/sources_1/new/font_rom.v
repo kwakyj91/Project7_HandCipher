@@ -13,6 +13,7 @@ module font_rom(
 
     initial begin
         $readmemh("font_rom.mem", mem);
+
     end
 
     always @(posedge clk) begin
