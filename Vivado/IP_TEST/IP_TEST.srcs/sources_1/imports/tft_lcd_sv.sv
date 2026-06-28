@@ -299,7 +299,7 @@ module lcd_bram
 endmodule
 
 module xpt2046(
-    Clk50m,
+    Clk,
     Rst_n,
     EN,
     X_Value,
@@ -314,7 +314,7 @@ module xpt2046(
     
 );
 
-    input Clk50m;
+    input Clk;
     input Rst_n;
     input EN;
     output reg [11:0]X_Value;
@@ -332,11 +332,11 @@ module xpt2046(
     wire pen_flag;
     wire pen_state;
     
-    reg [4:0]DIV_CNT;       // DCLK를 생성하기 위해 DCLK 클럭의 두 배인 샘플링 클럭을 가져옵니다.
+    reg [5:0]DIV_CNT;       // DCLK를 생성하기 위해 DCLK 클럭의 두 배인 샘플링 클럭을 가져옵니다.
     reg [5:0]CLK_GEN_CNT;   // DCLK 클럭 카운터를 생성합니다.
     reg [5:0]CONV_CNT;      // 완료된 변환 수를 기록합니다.
     
-    reg [19:0]PEN_CNT;
+    reg [20:0]PEN_CNT;
     
     reg DCLK2X;
     reg CONV_DONE;
@@ -354,7 +354,8 @@ module xpt2046(
     parameter CONV_TIMES = 36;  // 몇 번의 변환마다 평균값을 계산합니다. 
     parameter FILTER_PARAM = 4; // 16으로 나누기 == 오른쪽으로 4비트 이동
     
-    parameter CNT_TOP = 20'd499999; // PEN 핀 신호를 필터링하고 지연합니다.
+    parameter CNT_TOP = 21'd999999; // PEN 핀 신호를 필터링하고 지연합니다. 100MHz 기준 기본 약 10ms
+    parameter DCLK_DIV_TOP = 6'd49; // 100MHz에서 기존 50MHz/25분주와 같은 XPT2046 DCLK 속도
     
     wire [2:0]ADDR; // 샘플링 채널 제어
     
@@ -363,45 +364,45 @@ module xpt2046(
     wire cnt_full;// PEN 핀 신호 필터 카운터 카운트 풀 플래그
     
     // PEN 핀 지연 필터 카운터는
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
-        PEN_CNT <= 20'd0;
+        PEN_CNT <= 21'd0;
     else if(!PenIrq_n)begin // 펜이 낮은 수준에 있음 
         if(cnt_full)    // 가득 차면 0으로 반환 
-            PEN_CNT <= 20'd0;
+            PEN_CNT <= 21'd0;
         else    // 가득 차 있지 않으면 누적 
             PEN_CNT <= PEN_CNT + 1'b1;
     end else    // 펜이 높은 수준에 있으므로 계산 금지 
-        PEN_CNT <= 20'd0;
+        PEN_CNT <= 21'd0;
         
     assign cnt_full = (PEN_CNT == CNT_TOP);
     
     assign pen_state = cnt_full;// PenIrq_n 핀이 낮을 때 카운트가 가득 찰 때마다 pen_state 신호가 생성되어 36 샘플링이 트리거됩니다.
 
     // 2x DCLK 샘플링 클록 주파수 분할 카운터는   
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
-        DIV_CNT <= 5'd0;
+        DIV_CNT <= 6'd0;
     else if(EN_CONV)begin
-        if(DIV_CNT == 5'd24)
-            DIV_CNT <= 5'd0;
+        if(DIV_CNT == DCLK_DIV_TOP)
+            DIV_CNT <= 6'd0;
         else 
             DIV_CNT <= DIV_CNT + 1'b1;
     end
     else
-        DIV_CNT <= 5'd0;
+        DIV_CNT <= 6'd0;
     
     // DCLK 활성화 클록을 2회 생성합니다. 
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         DCLK2X <= 1'b0;
-    else if(DIV_CNT == 5'd24)
+    else if(DIV_CNT == DCLK_DIV_TOP)
         DCLK2X <= 1'b1;
     else
         DCLK2X <= 1'b0;
 
     // 2x DCLK 샘플링 클록을 사용하여 시퀀서의 기본 시퀀스를
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         CLK_GEN_CNT <= 6'b0;
     else if(EN_CONV)begin
@@ -416,7 +417,7 @@ module xpt2046(
         CLK_GEN_CNT <= 6'b0;
 
     // CLK_GEN_CNT 값에 따라 시퀀스를 제어하고, 제어어를 보내고 샘플링 결과를 
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)begin
         DIN <= 1'b1;
         Dtmp <= 12'd0;
@@ -503,7 +504,7 @@ module xpt2046(
     end
     
     // 36개 샘플 중 X 채널의 샘플링 결과를 18번 누적합니다.
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         tmp_X_Value <= 17'd0;
     else if(EN_CONV == 1'b0)
@@ -512,7 +513,7 @@ module xpt2046(
         tmp_X_Value <= tmp_X_Value + Dtmp;
 
     // 18 X 채널 샘플의 최대값을 기록합니다.
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         X_MAX <= 12'd0;
     else if(EN_CONV == 1'b0)
@@ -525,7 +526,7 @@ module xpt2046(
     end
     
     // 18 X 채널 샘플의 최소값을 기록합니다.     
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         X_MIN <= 12'd0;
     else if(EN_CONV == 1'b0)
@@ -538,7 +539,7 @@ module xpt2046(
     end
     
     // 36개 샘플 중 18번의 Y 채널 샘플링 결과를 누적합니다.
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         tmp_Y_Value <= 17'd0;
     else if(EN_CONV == 1'b0)
@@ -547,7 +548,7 @@ module xpt2046(
         tmp_Y_Value <= tmp_Y_Value + Dtmp;
     
     // 18 Y 채널 샘플의 최대값을 기록합니다.
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         Y_MAX <= 12'd0;
     else if(EN_CONV == 1'b0)
@@ -560,7 +561,7 @@ module xpt2046(
     end
     
     // 18 Y 채널 샘플의 최소값을 기록합니다.
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         Y_MIN <= 12'd0;
     else if(EN_CONV == 1'b0)
@@ -573,7 +574,7 @@ module xpt2046(
     end
     
     //36회 변환을 활성화합니다.
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         EN_CONV <= 1'b0;
     else if(EN)begin
@@ -588,7 +589,7 @@ module xpt2046(
         EN_CONV <= 1'b0;
 
     //
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         r_Get_Flag <= 1'b0;
     else if((CONV_CNT == CONV_TIMES) && CONV_DONE)
@@ -596,16 +597,16 @@ module xpt2046(
     else
         r_Get_Flag <= 1'b0;
         
-    always@(posedge Clk50m)
+    always@(posedge Clk)
         Get_Flag <= r_Get_Flag;
     
-    always@(posedge Clk50m)
+    always@(posedge Clk)
         CS_N <= ~EN_CONV;
         
     reg [11:0]r_X_Value,r_Y_Value;
     
     // 현재 Y 평균을 계산합니다. Y 평균 = (누적된 값 18개 - 최대값 - 최소값) / 16
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         r_X_Value <= 12'd0;
     else if(r_Get_Flag)
@@ -614,7 +615,7 @@ module xpt2046(
         r_X_Value <= r_X_Value;
     
     // 현재 Y 평균을 계산합니다. Y 평균 = (누적된 값 18개 - 최대값 - 최소값) / 16
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         r_Y_Value <= 12'd0;
     else if(r_Get_Flag)
@@ -623,14 +624,14 @@ module xpt2046(
         r_Y_Value <= r_Y_Value;
 
     // 마지막 변환 결과를 필터링하기 위해 마지막 X 결과를 출력으로 저장합니다. 마지막 변환 결과에는 보도자료 발표 순간이 포함되어 있으므로 결과가 안정적이지 않습니다. 
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         X_Value <= 12'd0;
     else if(r_Get_Flag)
         X_Value <= r_X_Value;
 
     // 마지막 변환 결과를 필터링하기 위해 마지막 Y 결과를 출력으로 저장합니다. 마지막 변환 결과에는 보도 자료가 포함된 순간이 포함되어 있으므로 결과가 안정적이지 않습니다.        
-    always@(posedge Clk50m or negedge Rst_n)
+    always@(posedge Clk or negedge Rst_n)
     if(!Rst_n)
         Y_Value <= 12'd0;
     else if(r_Get_Flag)

@@ -145,21 +145,22 @@ module tft_lcd_top_HY(
     // =========================================================
     // 4. 터치패드 제어 및 캘리브레이션
     // =========================================================
-    reg Clk50M = 0;
-    always @(posedge clk) Clk50M <= ~Clk50M; // 클럭 토글 방식으로 안정화
+    // XPT2046도 100MHz 시스템 클록 하나로 구동한다.
+    // 내부 FF로 만든 50MHz 신호를 clock처럼 쓰면 TIMING-17 no_clock 경고가 발생한다.
     wire Rst_n = ~reset_p;
     
     wire [11:0] X_Value, Y_Value;
     wire Get_Flag;
     
     // 터치 SPI가 LCD refresh에 주는 간섭을 줄이기 위해 샘플링 시작 간격을 약 15ms로 늦춘다.
-    // xpt2046 기본 CNT_TOP=499999는 50MHz 기준 약 10ms이다.
+    // 100MHz 기준 CNT_TOP=1,499,999가 약 15ms이며, DCLK_DIV_TOP=49가 기존 50MHz/25분주와 같은 DCLK 속도다.
     xpt2046 #(
         .CONV_TIMES(20),
         .FILTER_PARAM(3),
-        .CNT_TOP(20'd749999)
+        .CNT_TOP(21'd1499999),
+        .DCLK_DIV_TOP(6'd49)
     ) touch_pad(
-        Clk50M, Rst_n, 1'b1,
+        clk, Rst_n, 1'b1,
         X_Value, Y_Value, Get_Flag,
         PenIrq_n, DCLK, DIN, DOUT, CS_N
     );
@@ -183,43 +184,42 @@ module tft_lcd_top_HY(
     // =========================================================
     // 5. 입력 제한 (Bounding Box 내부만 터치 허용)
     // =========================================================
-    // XPT2046의 X/Y/Get_Flag는 Clk50M 도메인에서 나온다.
-    // Get_Flag가 뜬 순간의 좌표만 latch하고, clk 도메인에서는 새 샘플당 1회만 BRAM에 쓴다.
-    reg [15:0] touch_x_latched_50;
-    reg [15:0] touch_y_latched_50;
-    reg touch_sample_toggle_50;
+    // Get_Flag가 뜬 순간의 좌표만 latch하고, 다음 clk에서 새 샘플당 1회만 BRAM에 쓴다.
+    reg [15:0] touch_x_latched;
+    reg [15:0] touch_y_latched;
+    reg touch_sample_pending;
+    reg touch_sample_valid_reg;
 
-    always @(posedge Clk50M or posedge reset_p) begin
+    always @(posedge clk or posedge reset_p) begin
         if (reset_p) begin
-            touch_x_latched_50 <= 16'd0;
-            touch_y_latched_50 <= 16'd0;
-            touch_sample_toggle_50 <= 1'b0;
-        end else if (Get_Flag && ~PenIrq_n) begin
-            touch_x_latched_50 <= t_x;
-            touch_y_latched_50 <= t_y;
-            touch_sample_toggle_50 <= ~touch_sample_toggle_50;
+            touch_x_latched <= 16'd0;
+            touch_y_latched <= 16'd0;
+            touch_sample_pending <= 1'b0;
+            touch_sample_valid_reg <= 1'b0;
+        end else begin
+            touch_sample_valid_reg <= touch_sample_pending;
+            touch_sample_pending <= 1'b0;
+
+            if (Get_Flag && ~PenIrq_n) begin
+                touch_x_latched <= t_x;
+                touch_y_latched <= t_y;
+                touch_sample_pending <= 1'b1;
+            end
         end
     end
 
-    // 50MHz 도메인의 toggle을 100MHz clk 도메인으로 동기화한다.
-    reg [2:0] touch_sample_sync;
-    always @(posedge clk or posedge reset_p) begin
-        if (reset_p) touch_sample_sync <= 3'b000;
-        else touch_sample_sync <= {touch_sample_sync[1:0], touch_sample_toggle_50};
-    end
-
-    wire touch_sample_valid = touch_sample_sync[2] ^ touch_sample_sync[1];
+    wire touch_sample_valid = touch_sample_valid_reg;
 
     // 터치 좌표 판정: y<240은 캔버스, y>=240은 버튼 영역이다.
-    wire in_canvas_grid_touch = (touch_x_latched_50 >= 8 && touch_x_latched_50 < 232 &&
-                                 touch_y_latched_50 >= 8 && touch_y_latched_50 < 232);
-    wire in_button_area_touch = (touch_y_latched_50 >= 240);
-    wire touch_ok_button      = in_button_area_touch && (touch_x_latched_50 < 120);
-    wire touch_clear_button   = in_button_area_touch && (touch_x_latched_50 >= 120);
+    wire in_canvas_grid_touch = (touch_x_latched >= 8 && touch_x_latched < 232 &&
+                                 touch_y_latched >= 8 && touch_y_latched < 232);
+    wire in_button_area_touch = (touch_y_latched >= 240);
+    wire touch_ok_button      = in_button_area_touch && (touch_x_latched < 120);
+    wire touch_clear_button   = in_button_area_touch && (touch_x_latched >= 120);
 
     // 터치 좌표를 28x28 그리드 인덱스로 변환한다.
-    wire [4:0] grid_x_touch = (touch_x_latched_50 - 8) >> 3;
-    wire [4:0] grid_y_touch = (touch_y_latched_50 - 8) >> 3;
+    wire [4:0] grid_x_touch = (touch_x_latched - 8) >> 3;
+    wire [4:0] grid_y_touch = (touch_y_latched - 8) >> 3;
 
     // IP_TEST에서는 AXI STATUS가 아직 없으므로 OK는 내부 sticky 플래그로만 보관한다.
     // tft_axi.v로 옮길 때 STATUS[2]에 연결하고, read 시 clear하면 된다.
