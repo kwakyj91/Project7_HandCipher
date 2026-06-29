@@ -696,6 +696,17 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
   - `tb_font_rom`: XSim run 완료
   - `tb_vga`: `PASS: tb_vga completed`
 - 보드 테스트 결과: 16×16 폰트 출력 정상 확인.
+- `Vivado/IP_TEST/IP_TEST.xpr` merge 후 XML 오류 복구 완료.
+  - 원인: `font_rom.v` File 블록의 `</File>` 누락으로 line 192에서 XML mismatched tag 발생
+  - 조치: `font_rom.v` FileInfo/UsedIn 항목과 닫는 태그 복구
+  - 검증: Python XML parser 기준 `XML OK`
+- 현재 VGA 관련 파일 상태:
+  - `training/gen_font_mem.py`: 16×16 ASCII font mem 생성
+  - `font_rom.mem`: 2048 lines, 4 hex digits/line
+  - `font_rom.v`: 11-bit addr, 16-bit data, 2048-depth ROM
+  - `vga_ctrl.v`: 640×480 @60Hz, 40×30 text, 16×16 font render, 28×28 preview 유지
+  - `vga_test_top.v`: PLAN CONFIRMING 화면 형태의 standalone VGA test top
+  - `tb_font_rom.v`, `tb_vga.v`: 16×16 기준 XSim 검증 완료
 
 ---
 
