@@ -2,7 +2,8 @@
 
 module vga_axi #(
     parameter integer C_S_AXI_DATA_WIDTH = 32,
-    parameter integer C_S_AXI_ADDR_WIDTH = 6
+    parameter integer C_S_AXI_ADDR_WIDTH = 6,
+    parameter FONT_MEM_FILE = "font_rom.mem"
 )(
     output wire [3:0] vgaRed,
     output wire [3:0] vgaGreen,
@@ -196,7 +197,9 @@ module vga_axi #(
         end
     end
 
-    vga_ctrl u_vga_ctrl(
+    vga_ctrl #(
+        .FONT_MEM_FILE(FONT_MEM_FILE)
+    ) u_vga_ctrl(
         .clk(S_AXI_ACLK),
         .reset_p(!S_AXI_ARESETN),
         .enable(reg_enable),

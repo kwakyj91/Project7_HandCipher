@@ -21,7 +21,7 @@ module npu_axi # (
     input wire  S_AXI_AWVALID,
     output wire S_AXI_AWREADY,
     input wire [C_S_AXI_DATA_WIDTH-1 : 0] S_AXI_WDATA,
-    input wire [C_S_AXI_DATA_WIDTH-1 : 0] S_AXI_WSTRB, // 미사용 보존
+    input wire [(C_S_AXI_DATA_WIDTH/8)-1 : 0] S_AXI_WSTRB, // byte strobe
     input wire  S_AXI_WVALID,
     output wire S_AXI_WREADY,
     output wire [1 : 0] S_AXI_BRESP,
@@ -50,6 +50,8 @@ module npu_axi # (
     wire npu_busy;
     wire npu_done;
     wire [4:0] npu_result;
+    reg  done_sticky;
+    reg  [4:0] result_latched;
 
     // --- AXI 응답 고정값 ---
     assign S_AXI_AWREADY = axi_awready;
@@ -67,11 +69,18 @@ module npu_axi # (
             axi_awready <= 1'b0;
             axi_wready  <= 1'b0;
             axi_bvalid  <= 1'b0;
-            reg_ctrl    <= 32'h0;
-            npu_start   <= 1'b0;
+            reg_ctrl       <= 32'h0;
+            npu_start      <= 1'b0;
+            done_sticky    <= 1'b0;
+            result_latched <= 5'd0;
         end else begin
             // 펄스성 start 신호 처리를 위해 매 클록마다 클리어 준비
             npu_start <= 1'b0;
+
+            if (npu_done) begin
+                done_sticky    <= 1'b1;
+                result_latched <= npu_result;
+            end
 
             // 주소 및 데이터가 유효할 때 한 번에 Write 수락
             if (S_AXI_AWVALID && S_AXI_WVALID && !axi_awready) begin
@@ -83,7 +92,8 @@ module npu_axi # (
                 if (S_AXI_AWADDR[3:2] == 2'b00) begin
                     reg_ctrl <= S_AXI_WDATA;
                     if (S_AXI_WDATA[0] == 1'b1) begin
-                        npu_start <= 1'b1; // NPU 구동 트리거 활성화
+                        npu_start   <= 1'b1; // NPU 구동 트리거 활성화
+                        done_sticky <= 1'b0; // 새 추론 시작 시 이전 done 제거
                     end
                 end
             end else begin
@@ -109,8 +119,8 @@ module npu_axi # (
 
                 case (S_AXI_ARADDR[3:2])
                     2'b00: axi_rdata <= reg_ctrl; // 0x00: CTRL 읽기 (디버그용)
-                    2'b01: axi_rdata <= {30'h0, npu_busy, npu_done}; // 0x04: STATUS 플래그 매핑
-                    2'b10: axi_rdata <= {27'h0, npu_result};         // 0x08: RESULT 최종 레이블
+                    2'b01: axi_rdata <= {30'h0, npu_busy, done_sticky}; // 0x04: STATUS [0]=done sticky, [1]=busy
+                    2'b10: axi_rdata <= {27'h0, result_latched};         // 0x08: RESULT 최종 레이블
                     default: axi_rdata <= 32'hDEADBEEF;
                 endcase
             end else begin

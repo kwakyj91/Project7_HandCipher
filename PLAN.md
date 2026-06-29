@@ -130,10 +130,10 @@ Project_7_HandCipher/
 │   │   │       ├── bias_rom.v
 │   │   │       ├── npu_axi.v              (NPU AXI4-Lite 래퍼)
 │   │   │       ├── tb_npu.v
-│   │   │       ├── canvas_display.v       (ILI9341 SPI 스트리밍)
-│   │   │       ├── draw_canvas.v          (터치 좌표 → BRAM Port A)
-│   │   │       ├── tft_axi.v              (TFT AXI4-Lite 래퍼)
-│   │   │       ├── tb_tft.v
+│   │   │       ├── canvas_display.v       (✅ ILI9341 SPI 스트리밍)
+│   │   │       ├── draw_canvas.v          (✅ 터치 좌표 → BRAM Port A)
+│   │   │       ├── tft_axi.v              (✅ TFT AXI4-Lite 래퍼)
+│   │   │       ├── tb_tft.v               (✅ XSim PASS)
 │   │   │       ├── font_rom.v             (✅ 16×16 폰트 ROM)
 │   │   │       ├── vga_ctrl.v             (✅ 640×480 타이밍 + 문자 렌더러)
 │   │   │       ├── vga_axi.v              (✅ VGA AXI4-Lite 래퍼)
@@ -364,6 +364,7 @@ output        canvas_ena
 
 - IP_TEST standalone 검증에서는 `image_buffer.v`를 내부 dual-port BRAM처럼 사용
 - TOP Block Design 통합에서는 `image_buffer.v`를 제거하고, 위 포트를 외부로 노출해 BRAM Generator Port A에 배선
+- 현재 `tft_axi.v`는 LCD 표시와 CPU `CANVAS_RD_DATA` readback을 위해 내부 784-bit canvas mirror를 유지하고, 같은 write/clear 스트림을 외부 BRAM Port A에도 내보낸다. 따라서 NPU는 외부 BRAM을 읽고, TFT 표시/CPU readback은 내부 mirror를 읽는다.
 
 ---
 
@@ -566,10 +567,11 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 
 ### `tb_tft.v`
 
-- XPT2046 터치 시뮬레이션 → TOUCH_X/Y 레지스터 업데이트 확인
-- y < 240 터치 → 캔버스 BRAM Port A 쓰기 확인
-- y ≥ 240, x < 120 → STATUS[2](btn_ok) 세팅 확인
-- y ≥ 240, x ≥ 120 → STATUS[3](btn_clear) 세팅 확인
+- AXI write CTRL[1]=1 → canvas clear sequence 시작 확인
+- clear 중 외부 BRAM Port A write가 0으로 발생하는지 확인
+- CANVAS_RD_ADDR/DATA readback 확인
+- STATUS[1]=lcd_ready 확인
+- 다음 보강: XPT2046 DOUT bitstream 모델링 후 OK/CLEAR sticky flag와 터치 좌표 변환 검증
 
 ---
 
@@ -588,13 +590,14 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 4. `npu_ctrl.v`, `weight_rom_l1.v`, `weight_rom_l2.v`, `bias_rom.v`, `image_buffer.v`
 5. `npu_axi.v` (AXI4-Lite 래퍼)
 6. `tb_npu.v` → XSim: AXI start → done, RESULT 0~25 확인
+6-1. ~~`tb_npu_axi.v` → 실제 AXI write/read polling 검증, STATUS done sticky 확인~~ ✅
 7. **Create and Package New IP** → `npu_ip_v1_0`
 
 **TFT-LCD IP:**
 
-8. `canvas_display.v`, `draw_canvas.v` (tft_lcd_sv.sv의 spi/xpt2046 재사용)
-9. `tft_axi.v` (AXI4-Lite 래퍼)
-10. `tb_tft.v` → XSim: 터치 시뮬레이션 → BRAM Port A 쓰기 확인
+8. ~~`canvas_display.v`, `draw_canvas.v` (tft_lcd_sv.sv의 spi/xpt2046 재사용)~~ ✅
+9. ~~`tft_axi.v` (AXI4-Lite 래퍼)~~ ✅
+10. ~~`tb_tft.v` → XSim: AXI clear/readback + BRAM Port A write 확인~~ ✅
 11. **Create and Package New IP** → `tft_ip_v1_0`
 
 **VGA IP:**
@@ -605,6 +608,7 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 15. ~~`vga_ctrl.v` 수정 → 40×30 문자, `char*16+row`, 16-bit row 렌더러~~ ✅
 16. ~~`tb_vga.v` 갱신 → 16×16 문자 출력 + Hsync/Vsync 검증~~ ✅
 17. ~~`vga_axi.v` 작성 → AXI4-Lite VGA 래퍼, CHAR_ADDR 0~1199 기준~~ ✅
+17-1. ~~`tb_vga_axi.v` → AXI 문자쓰기/clear/canvas_mode/Hsync 검증~~ ✅
 18. **Create and Package New IP** → `vga_ip_v1_0`
 
 ### Phase 3 — TOP 통합 (Vivado/TOP/)
@@ -670,6 +674,21 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 
 ---
 
+## 미해결 이슈
+
+### NPU IP 패키징 파일 누락 의심 (2026-06-29)
+
+- `kwakyj91(곽영재)`가 로컬 Vivado에서 `npu_ip_v1_0` 패키징을 완료했다고 PLAN.md에 기록했으나, git 저장소에 IP 파일이 없음.
+- **원인 추정:** `Vivado/TOP/.gitignore`에 `*.xml` 규칙이 있어서 `component.xml`(IP 패키징의 핵심 파일)이 커밋되지 않았을 가능성이 높음.
+- **확인 필요:** 곽영재 로컬에 `ip_repo/npu_ip_v1_0/component.xml`이 존재하는지 확인.
+- **조치 필요 시:** `.gitignore`에서 IP repo 경로 예외 처리 후 재업로드.
+  ```
+  *.xml
+  !**/ip_repo/**/component.xml
+  ```
+
+---
+
 ## 작업 기록
 
 ### 2026-06-26 (목)
@@ -709,6 +728,8 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 | 12:54 | `0f3c3a4` | **VGA IP 완성** — `vga_axi.v` 작성, `tb_vga.v` 갱신, 16×16 폰트 전환 전면 적용, .gitignore 추가, XSim `PASS: tb_vga completed` 확인, 보드 테스트 정상 |
 | 12:58 | `c12b318` | **Merge** — NPU 파트(원격 브랜치) merge |
 | 14:20 | `f386d2b` | **PLAN.md 최종 정리** — NPU 파트 상세 사양 및 검증 결과 반영 |
+| 16:09 | `working tree` | **TFT IP 1차 구현** — `canvas_display.v`, `draw_canvas.v`, `tft_axi.v`, `tb_tft.v` 작성, `tft_lcd_sv.sv` 재사용 활성화, XSim `PASS: tb_tft completed` 확인 |
+| 17:07 | `working tree` | **AXI 테스트벤치 추가** — `tb_npu_axi.v`, `tb_vga_axi.v` 작성, `npu_axi` STATUS done sticky 및 WSTRB 폭 수정, XSim PASS 확인 |
 
 ---
 
@@ -720,6 +741,18 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 - `vga_axi.v`: AXI4-Lite 래퍼, CHAR_ADDR 0~1199, CANVAS_WR_*, FG/BG_COLOR
 - `vga_test_top.v`: CONFIRMING 화면 standalone VGA test top
 - `tb_font_rom.v`, `tb_vga.v`: 16×16 기준 XSim 검증 완료
+
+---
+
+**현재 TFT 관련 파일 상태 (2026-06-29 16:09 기준):**
+- `canvas_display.v`: 240×320 portrait TFT 렌더링, 28×28 캔버스 8배 확대 표시, 하단 OK/CLR 버튼 표시
+- `draw_canvas.v`: XPT2046 raw 좌표 변환, 좌우 반전 보정, 캔버스 영역 write, OK/CLEAR 버튼 판정, clear sequence 생성
+- `tft_axi.v`: AXI4-Lite 래퍼, CTRL/TOUCH_X/TOUCH_Y/STATUS/CANVAS_RD_* 레지스터 구현
+- `tft_axi.v`는 IP_TEST standalone 표시와 CPU readback을 위해 내부 784-bit canvas mirror를 유지하고, 같은 write/clear 스트림을 외부 `canvas_addra/dina/wea/ena`로도 출력
+- `tft_lcd_sv.sv`: 기존 `spi`, `tft_sv`, `xpt2046` 재사용. LCD SPI 25MHz 완화 설정과 XPT2046 15ms 샘플링 설정 유지
+- `tb_tft.v`: AXI `CTRL[1]` clear, 외부 BRAM Port A write, `CANVAS_RD_DATA`, `STATUS[1]=lcd_ready` 기본 검증
+- 검증 결과: `xvlog -sv` 통과, `xelab tb_tft` 통과, XSim `PASS: tb_tft completed` 확인
+- 남은 보강: XPT2046 `DOUT` bitstream 모델링 기반 터치 좌표/OK/CLEAR sticky flag 시뮬레이션
 
 ---
 
