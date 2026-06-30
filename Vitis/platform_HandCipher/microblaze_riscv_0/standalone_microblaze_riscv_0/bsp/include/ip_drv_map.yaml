@@ -1,0 +1,12 @@
+HandCipher_EMNIST_NPU_0:
+- HandCipher_EMNIST_NPU
+- None
+HandCipher_TFT_LCD_0:
+- HandCipher_TFT_LCD
+- None
+HandCipher_VGA_0:
+- HandCipher_VGA
+- None
+axi_uartlite_0:
+- axi_uartlite
+- uartlite
