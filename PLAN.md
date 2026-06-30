@@ -200,6 +200,7 @@ Project_7_HandCipher/
 │   │   │   ├── tb_font_rom.v              (✅ XSim PASS)
 │   │   │   ├── tb_npu.v                   (✅ XSim PASS)
 │   │   │   ├── tb_npu_axi.v               (✅ XSim PASS)
+│   │   │   ├── tb_npu_patterns.v          (✅ NPU 패턴 검증용)
 │   │   │   ├── tb_tft.v                   (✅ XSim PASS)
 │   │   │   ├── tb_vga.v                   (✅ XSim PASS)
 │   │   │   └── tb_vga_axi.v               (✅ XSim PASS)
@@ -644,14 +645,14 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 5. ~~`npu_axi.v` (AXI4-Lite 래퍼, 외부 Canvas BRAM Port B)~~ ✅
 6. ~~`tb_npu.v` → XSim: start → done, RESULT 0~25 확인~~ ✅
 6-1. ~~`tb_npu_axi.v` → 실제 AXI write/read polling 검증, STATUS done sticky 확인~~ ✅
-7. **Create and Package New IP** → `npu_ip_v1_0` ⚠️ 패키징 산출물 저장소 누락/확인 필요
+7. ~~**Create and Package New IP** → `npu_ip_v1_0`~~ ✅ (`ip_repo/npu_ip/component.xml` 확인)
 
 **TFT-LCD IP:**
 
 8. ~~`canvas_display.v`, `draw_canvas.v` (tft_lcd_sv.sv의 spi/xpt2046 재사용)~~ ✅
 9. ~~`tft_axi.v` (AXI4-Lite 래퍼)~~ ✅
 10. ~~`tb_tft.v` → XSim: AXI clear/readback + BRAM Port A write 확인~~ ✅
-11. **Create and Package New IP** → `tft_ip_v1_0` ⏳ 미완료
+11. ~~**Create and Package New IP** → `tft_ip_v1_0`~~ ✅ (`ip_repo/tft_ip/component.xml` 확인)
 
 **VGA IP:**
 
@@ -662,7 +663,7 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 16. ~~`tb_vga.v` 갱신 → 16×16 문자 출력 + Hsync/Vsync 검증~~ ✅
 17. ~~`vga_axi.v` 작성 → AXI4-Lite VGA 래퍼, CHAR_ADDR 0~1199 기준~~ ✅
 17-1. ~~`tb_vga_axi.v` → AXI 문자쓰기/clear/canvas_mode/Hsync 검증~~ ✅
-18. **Create and Package New IP** → `vga_ip_v1_0` ⏳ 미완료
+18. ~~**Create and Package New IP** → `vga_ip_v1_0`~~ ✅ (`ip_repo/vga_ip/component.xml` 확인)
 
 ### Phase 3 — TOP 통합 (Vivado/TOP/) ✅ 기본 연결성 완료
 
@@ -682,13 +683,13 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 22. 합성 + 구현 → BRAM18 ≤50, WNS ≥ 0 확인
 23. **File → Export → Export Hardware** → `handcipher.xsa` 생성
 
-### Phase 4 — Vitis C 코드 (Vitis/) ⏳ 미시작
+### Phase 4 — Vitis C 코드 (Vitis/) ⏳ 진행 중
 
-24. Vitis에서 handcipher.xsa로 Platform 프로젝트 생성
-25. Application 프로젝트 생성 → `caesar.c` / `caesar.h`
-26. `display.c` / `display.h`
-27. `main.c`
-28. 빌드 + Basys3에 Program Device
+24. ~~Vitis에서 handcipher.xsa로 Platform 프로젝트 생성~~ ✅ (`Vitis/platform_HandCipher` 존재)
+25. Application 프로젝트 생성 → `caesar.c` / `caesar.h` ⏳
+26. `display.c` / `display.h` ⏳
+27. `main.c` ⏳
+28. 빌드 + Basys3에 Program Device ⏳
 
 ### Phase 5 — 하드웨어 검증 ⏳ 미시작
 
