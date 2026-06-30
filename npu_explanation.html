@@ -1,0 +1,656 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>NPU 동작 원리 및 코드 설명</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1f2937;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #f78166;
+    --accent4: #d2a8ff;
+    --accent5: #ffa657;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --code-bg: #0d1117;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
+
+  header { background: linear-gradient(135deg, #1a2a1a 0%, #0d1a0d 100%); padding: 3rem 2rem; text-align: center; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 2.4rem; color: var(--accent2); margin-bottom: .5rem; }
+  header p { color: var(--muted); font-size: 1rem; }
+
+  nav { position: sticky; top: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: .6rem 2rem; z-index: 100; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  nav a { color: var(--accent2); text-decoration: none; font-size: .85rem; white-space: nowrap; }
+  nav a:hover { text-decoration: underline; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+  section { margin-bottom: 3rem; }
+  h2 { font-size: 1.6rem; color: var(--accent2); border-bottom: 2px solid var(--border); padding-bottom: .5rem; margin-bottom: 1.2rem; }
+  h3 { font-size: 1.2rem; color: var(--accent4); margin: 1.5rem 0 .7rem; }
+  h4 { font-size: 1rem; color: var(--accent5); margin: 1.2rem 0 .5rem; }
+  p { margin-bottom: .8rem; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.2rem; }
+  .card-accent { border-left: 4px solid var(--accent); }
+  .card-green  { border-left: 4px solid var(--accent2); }
+  .card-red    { border-left: 4px solid var(--accent3); }
+  .card-purple { border-left: 4px solid var(--accent4); }
+  .card-orange { border-left: 4px solid var(--accent5); }
+
+  code { font-family: 'Consolas', 'JetBrains Mono', monospace; font-size: .88rem; background: var(--code-bg); padding: .1rem .4rem; border-radius: 3px; color: var(--accent2); }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; overflow-x: auto; font-family: 'Consolas', monospace; font-size: .82rem; line-height: 1.6; margin: .8rem 0 1.2rem; }
+  pre .kw  { color: #ff7b72; }
+  pre .sig { color: #79c0ff; }
+  pre .str { color: #a5d6ff; }
+  pre .cmt { color: #8b949e; font-style: italic; }
+  pre .num { color: #ffa657; }
+  pre .fn  { color: #d2a8ff; }
+  pre .par { color: #e6edf3; }
+
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0 1.2rem; }
+  th { background: var(--surface2); color: var(--accent2); padding: .6rem 1rem; text-align: left; border: 1px solid var(--border); font-size: .9rem; }
+  td { padding: .55rem 1rem; border: 1px solid var(--border); font-size: .88rem; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.03); }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width:700px){ .grid2 { grid-template-columns: 1fr; } }
+
+  .tag { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .75rem; font-weight: 600; margin-right: .3rem; }
+  .tag-blue   { background: rgba(88,166,255,.15); color: var(--accent); }
+  .tag-green  { background: rgba(63,185,80,.15);  color: var(--accent2); }
+  .tag-red    { background: rgba(247,129,102,.15);color: var(--accent3); }
+  .tag-purple { background: rgba(210,168,255,.15);color: var(--accent4); }
+  .tag-orange { background: rgba(255,166,87,.15); color: var(--accent5); }
+
+  /* FSM 다이어그램 */
+  .fsm-wrap { overflow-x: auto; }
+
+  .waveform { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; padding: 1rem; font-family: monospace; font-size: .78rem; }
+  .wv-label { color: var(--muted); display: inline-block; width: 160px; text-align: right; padding-right: 12px; }
+  .wv-line  { display: flex; align-items: center; margin-bottom: 4px; }
+  .wv-hi    { color: var(--accent2); }
+  .wv-lo    { color: var(--accent3); }
+  .wv-data  { color: var(--accent4); }
+  .wv-sync  { color: var(--accent5); }
+
+  .note { background: rgba(63,185,80,.08); border: 1px solid rgba(63,185,80,.3); border-radius: 6px; padding: .8rem 1rem; margin: .8rem 0; font-size: .9rem; }
+  .warn { background: rgba(255,166,87,.08); border: 1px solid rgba(255,166,87,.3); border-radius: 6px; padding: .8rem 1rem; margin: .8rem 0; font-size: .9rem; }
+
+  .math { background: var(--surface2); border: 1px solid var(--border); border-radius: 6px; padding: .8rem 1.2rem; font-family: 'Consolas', monospace; margin: .8rem 0; color: var(--accent4); font-size: .9rem; }
+
+  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>NPU (Neural Processing Unit)</h1>
+  <p>동작 원리 · 코드 분석 · 테스트벤치 · 예상 파형</p>
+</header>
+
+<nav>
+  <a href="#principle">1. NPU 동작원리</a>
+  <a href="#nn_math">2. 신경망 수학</a>
+  <a href="#npu_ctrl">3. npu_ctrl.v</a>
+  <a href="#npu_axi">4. npu_axi.v</a>
+  <a href="#tb_npu">5. tb_npu.v</a>
+  <a href="#tb_npu_axi">6. tb_npu_axi.v</a>
+  <a href="#waveforms">7. 예상 파형</a>
+  <a href="#timing">8. 연산 사이클 수</a>
+</nav>
+
+<main>
+
+<!-- ==================== 1. NPU 동작원리 ==================== -->
+<section id="principle">
+<h2>1. NPU 동작 원리</h2>
+
+<div class="card card-green">
+<h3>무엇을 하는 모듈인가?</h3>
+<p>이 NPU는 <strong>손글씨 알파벳 인식기</strong>입니다. 28×28 픽셀 손글씨 이미지(784개 픽셀)를 입력받아, A~Z 26개 알파벳 중 어느 것인지 분류하는 <strong>완전 연결 신경망(Fully Connected Neural Network)</strong>을 FPGA 하드웨어로 구현한 것입니다.</p>
+</div>
+
+<h3>신경망 구조</h3>
+<div class="math">
+입력층:   784 뉴런  (28×28 픽셀, 1비트 이진값)
+           ↓  W1[784×64] + b1[64]  +  ReLU
+은닉층:    64 뉴런  (uint8, 0~255)
+           ↓  W2[64×26]  + b2[26]
+출력층:    26 뉴런  (int32 스코어, 최댓값 인덱스 → 알파벳)
+</div>
+
+<h3>전체 처리 흐름</h3>
+<div class="card card-accent">
+<table>
+  <tr><th>단계</th><th>FSM 상태</th><th>동작</th><th>소요 클럭</th></tr>
+  <tr><td>1</td><td><span class="tag tag-blue">IDLE</span></td><td>대기. start 신호 수신 시 진입</td><td>—</td></tr>
+  <tr><td>2</td><td><span class="tag tag-green">LOAD_CANVAS</span></td><td>BRAM 첫 번째 주소 Pre-fetch</td><td>1</td></tr>
+  <tr><td>3</td><td><span class="tag tag-purple">CALC_L1</span></td><td>784×64 MAC (64 hidden 노드 연산)</td><td>~50,176</td></tr>
+  <tr><td>4</td><td><span class="tag tag-orange">CALC_L2</span></td><td>64×26 MAC (26 출력 노드 연산)</td><td>~1,664</td></tr>
+  <tr><td>5</td><td><span class="tag tag-red">ARGMAX</span></td><td>26개 스코어 중 최댓값 인덱스 추출</td><td>26</td></tr>
+  <tr><td>6</td><td><span class="tag tag-green">DONE</span></td><td>done=1, result 확정 → IDLE 복귀</td><td>1</td></tr>
+</table>
+</div>
+
+<h3>핵심 하드웨어 자원</h3>
+<div class="grid2">
+  <div class="card card-purple">
+    <h4>4개의 블록 ROM</h4>
+    <ul style="padding-left:1.2rem">
+      <li><code>weight_rom_l1</code>: W1 [784×64 = 50,176개] × int8</li>
+      <li><code>bias_rom_l1</code>: b1 [64개] × int32</li>
+      <li><code>weight_rom_l2</code>: W2 [64×26 = 1,664개] × int8</li>
+      <li><code>bias_rom_l2</code>: b2 [26개] × int32</li>
+    </ul>
+  </div>
+  <div class="card card-orange">
+    <h4>내부 레지스터 / RAM</h4>
+    <ul style="padding-left:1.2rem">
+      <li><code>hidden_layer[0:63]</code>: L1 결과 저장 (uint8 × 64)</li>
+      <li><code>l2_score_buf[0:25]</code>: L2 스코어 저장 (int32 × 26)</li>
+      <li><code>l1_acc</code>, <code>l2_acc</code>: 32비트 누적 가산기</li>
+      <li><code>max_score</code>, <code>result</code>: Argmax 추적</li>
+    </ul>
+  </div>
+</div>
+
+<h3>외장 BRAM 인터페이스</h3>
+<div class="card card-green">
+<p>캔버스 픽셀 데이터는 외부 Block Design의 BRAM Generator Port B에 저장됩니다. NPU는 <strong>읽기 전용</strong>으로 접근하며, BRAM의 동기식 읽기 특성(주소 입력 후 1클럭 뒤 데이터 출력)을 맞추기 위해 <code>canvas_addrb_reg</code>에서 1클럭 선행 주소를 제공합니다.</p>
+<pre>
+<span class="cmt">// BRAM 1클럭 레이턴시 보정: 실제 주소 출력은 1클럭 지연</span>
+<span class="kw">always</span> @(<span class="kw">posedge</span> clk) begin
+    canvas_addrb &lt;= canvas_addrb_reg;  <span class="cmt">// 1클럭 파이프라인</span>
+end
+<span class="cmt">// canvas_doutb는 canvas_addrb가 설정된 다음 클럭에 유효</span>
+</pre>
+</div>
+</section>
+
+<!-- ==================== 2. 신경망 수학 ==================== -->
+<section id="nn_math">
+<h2>2. 신경망 수학 — 정수 양자화 구현</h2>
+
+<h3>Layer 1 (입력층 → 은닉층)</h3>
+<div class="math">
+<strong>수식:</strong>  h[j] = ReLU(clamp( (Σ x[i] × W1[j,i] + b1[j]) >> SHIFT_L1, 0, 255 ))
+
+  x[i]   : 1비트 픽셀 → uint8로 변환 (1→255, 0→0)
+  W1[j,i]: int8 가중치 (-128 ~ +127)
+  b1[j]  : int32 바이어스
+  SHIFT_L1 = 10  (고정소수점 스케일링 조정)
+  결과 h[j]: uint8 (0 ~ 255)
+</div>
+
+<p>실수 부동소수점 연산 대신 <strong>정수 고정소수점(fixed-point)</strong>을 사용하여 곱셈기(DSP 블록)만으로 추론합니다. <code>&gt;&gt; 10</code>은 2¹⁰=1024로 나누는 것과 동일합니다.</p>
+
+<pre>
+<span class="cmt">// 1비트 픽셀 → uint8 (255 또는 0)</span>
+<span class="kw">wire</span> [7:0] pixel_uint8 = canvas_doutb ? <span class="num">8'hFF</span> : <span class="num">8'h00</span>;
+
+<span class="cmt">// MAC 누적 (32비트 누적기, 오버플로우 방지)</span>
+l1_acc &lt;= l1_acc + ($<span class="fn">signed</span>({<span class="num">1'b0</span>, pixel_uint8}) * w1_data);
+
+<span class="cmt">// 784번 루프 완료 시: 바이어스 + 시프트 + ReLU + Clamp</span>
+scaled_out = (l1_acc + b1_data) >>> <span class="num">10</span>;
+<span class="kw">if</span>      (scaled_out &lt; 0)   hidden_layer[hidden_cnt] &lt;= <span class="num">8'h00</span>;  <span class="cmt">// ReLU</span>
+<span class="kw">else if</span> (scaled_out > 255) hidden_layer[hidden_cnt] &lt;= <span class="num">8'hFF</span>;  <span class="cmt">// Clamp</span>
+<span class="kw">else</span>                        hidden_layer[hidden_cnt] &lt;= scaled_out[7:0];
+</pre>
+
+<h3>Layer 2 (은닉층 → 출력층)</h3>
+<div class="math">
+<strong>수식:</strong>  score[k] = Σ h[j] × W2[k,j] + b2[k]   (ReLU 없음, 음수 스코어 허용)
+
+  h[j]   : uint8 은닉 뉴런 값
+  W2[k,j]: int8 가중치
+  b2[k]  : int32 바이어스
+  score[k]: int32 (Argmax에서 최댓값 인덱스 추출)
+</div>
+
+<pre>
+l2_acc &lt;= l2_acc + ($<span class="fn">signed</span>({<span class="num">1'b0</span>, hidden_layer[hidden_cnt]}) * w2_data);
+<span class="cmt">// 64번 루프 완료 시: 바이어스만 더함 (시프트/ReLU 없음)</span>
+l2_score_buf[class_cnt] &lt;= l2_acc + b2_data;
+</pre>
+
+<h3>Argmax</h3>
+<div class="math">
+result = argmax(score[0], score[1], ..., score[25])
+       = 가장 큰 L2 스코어를 가진 인덱스 (0=A, 1=B, ..., 25=Z)
+</div>
+
+<pre>
+<span class="cmt">// max_score는 최솟값(0x80000000)으로 초기화</span>
+<span class="kw">if</span> (l2_score_buf[class_cnt] > max_score) begin
+    max_score &lt;= l2_score_buf[class_cnt];
+    result    &lt;= class_cnt;
+end
+</pre>
+
+<h3>ROM 주소 계산</h3>
+<table>
+  <tr><th>ROM</th><th>주소 계산식</th><th>범위</th><th>비고</th></tr>
+  <tr><td>weight_rom_l1</td><td><code>hidden_cnt × 784 + pixel_cnt</code></td><td>0~50175</td><td>행 우선(row-major) 배열</td></tr>
+  <tr><td>bias_rom_l1</td><td><code>hidden_cnt</code></td><td>0~63</td><td>은닉 노드 인덱스</td></tr>
+  <tr><td>weight_rom_l2</td><td><code>class_cnt × 64 + hidden_cnt</code></td><td>0~1663</td><td>행 우선 배열</td></tr>
+  <tr><td>bias_rom_l2</td><td><code>class_cnt</code></td><td>0~25</td><td>출력 클래스 인덱스</td></tr>
+</table>
+
+<div class="warn">
+<strong>주의:</strong> 모든 ROM은 Block RAM으로 추론되어 1클럭 읽기 레이턴시가 있습니다. MAC 연산은 ROM 주소를 제시하고 <em>다음 클럭</em>에 데이터가 나오는 방식이므로, 카운터와 ROM 데이터 사이에 1클럭 파이프라인 오프셋이 내재합니다.
+</div>
+</section>
+
+<!-- ==================== 3. npu_ctrl.v ==================== -->
+<section id="npu_ctrl">
+<h2>3. npu_ctrl.v — NPU 연산 FSM 코어</h2>
+
+<div class="card card-green">
+<p>신경망 추론 연산 전체를 FSM으로 제어하는 핵심 모듈입니다. ROM 4개를 인스턴스화하고, MAC 연산과 Argmax를 순차적으로 실행합니다.</p>
+</div>
+
+<h3>FSM 상태 전이도</h3>
+<div class="fsm-wrap">
+<svg width="800" height="180" viewBox="0 0 800 180" style="min-width:700px;">
+  <rect width="800" height="180" fill="#0d1117"/>
+
+  <!-- 상태 박스 -->
+  <!-- IDLE -->
+  <rect x="10" y="70" width="80" height="40" rx="6" fill="#1f2937" stroke="#58a6ff" stroke-width="2"/>
+  <text x="50" y="95" fill="#58a6ff" font-size="11" text-anchor="middle" font-family="Consolas">IDLE</text>
+
+  <!-- LOAD_CANVAS -->
+  <rect x="120" y="70" width="100" height="40" rx="6" fill="#1f2937" stroke="#3fb950" stroke-width="2"/>
+  <text x="170" y="95" fill="#3fb950" font-size="10" text-anchor="middle" font-family="Consolas">LOAD_CANVAS</text>
+
+  <!-- CALC_L1 -->
+  <rect x="250" y="70" width="90" height="40" rx="6" fill="#1f2937" stroke="#d2a8ff" stroke-width="2"/>
+  <text x="295" y="95" fill="#d2a8ff" font-size="11" text-anchor="middle" font-family="Consolas">CALC_L1</text>
+
+  <!-- CALC_L2 -->
+  <rect x="370" y="70" width="90" height="40" rx="6" fill="#1f2937" stroke="#ffa657" stroke-width="2"/>
+  <text x="415" y="95" fill="#ffa657" font-size="11" text-anchor="middle" font-family="Consolas">CALC_L2</text>
+
+  <!-- ARGMAX -->
+  <rect x="490" y="70" width="90" height="40" rx="6" fill="#1f2937" stroke="#f78166" stroke-width="2"/>
+  <text x="535" y="95" fill="#f78166" font-size="11" text-anchor="middle" font-family="Consolas">ARGMAX</text>
+
+  <!-- DONE -->
+  <rect x="610" y="70" width="80" height="40" rx="6" fill="#1f2937" stroke="#3fb950" stroke-width="2"/>
+  <text x="650" y="95" fill="#3fb950" font-size="11" text-anchor="middle" font-family="Consolas">DONE</text>
+
+  <!-- 화살표 -->
+  <!-- IDLE → LOAD_CANVAS (start) -->
+  <line x1="90" y1="90" x2="119" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="104" y="83" fill="#8b949e" font-size="8" text-anchor="middle">start</text>
+
+  <!-- LOAD_CANVAS → CALC_L1 -->
+  <line x1="220" y1="90" x2="249" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- CALC_L1 → CALC_L2 (pixel_cnt==783 & hidden_cnt==63) -->
+  <line x1="340" y1="90" x2="369" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="354" y="83" fill="#8b949e" font-size="7" text-anchor="middle">L1 done</text>
+
+  <!-- CALC_L2 → ARGMAX (class_cnt==25) -->
+  <line x1="460" y1="90" x2="489" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+  <text x="474" y="83" fill="#8b949e" font-size="7" text-anchor="middle">L2 done</text>
+
+  <!-- ARGMAX → DONE -->
+  <line x1="580" y1="90" x2="609" y2="90" stroke="#8b949e" stroke-width="1.5" marker-end="url(#arr)"/>
+
+  <!-- DONE → IDLE (곡선) -->
+  <path d="M 690 70 Q 700 30 650 20 Q 400 0 50 60" fill="none" stroke="#8b949e" stroke-width="1.5" stroke-dasharray="4,3" marker-end="url(#arr)"/>
+  <text x="370" y="14" fill="#8b949e" font-size="8" text-anchor="middle">→ IDLE</text>
+
+  <!-- CALC_L1 자기루프 (pixel_cnt < 783) -->
+  <path d="M 295 70 Q 295 40 310 38 Q 330 36 330 55 Q 330 68 320 70" fill="none" stroke="#d2a8ff" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#arr)"/>
+  <text x="330" y="32" fill="#d2a8ff" font-size="8">cnt&lt;783</text>
+
+  <!-- CALC_L2 자기루프 (hidden_cnt < 63) -->
+  <path d="M 415 70 Q 415 40 430 38 Q 450 36 450 55 Q 450 68 440 70" fill="none" stroke="#ffa657" stroke-width="1.2" stroke-dasharray="3,2" marker-end="url(#arr)"/>
+  <text x="450" y="32" fill="#ffa657" font-size="8">cnt&lt;63</text>
+
+  <!-- 마커 정의 -->
+  <defs>
+    <marker id="arr" markerWidth="6" markerHeight="6" refX="5" refY="3" orient="auto">
+      <path d="M0,0 L0,6 L6,3 Z" fill="#8b949e"/>
+    </marker>
+  </defs>
+</svg>
+</div>
+
+<h3>CALC_L1 상태 상세 동작</h3>
+<pre>
+CALC_L1: begin
+    <span class="cmt">// MAC: 누적 가산. pixel_cnt는 0~783까지 순환, hidden_cnt는 0~63</span>
+    l1_acc &lt;= l1_acc + ($<span class="fn">signed</span>({<span class="num">1'b0</span>, pixel_uint8}) * w1_data);
+
+    <span class="kw">if</span> (pixel_cnt &lt; 783) begin
+        pixel_cnt        &lt;= pixel_cnt + 1;
+        canvas_addrb_reg &lt;= pixel_cnt + 1;  <span class="cmt">// 다음 픽셀 BRAM 주소 선행 제공</span>
+    end <span class="kw">else</span> begin
+        <span class="cmt">// hidden 노드 1개 완성 → 스케일링 + ReLU + Clamp</span>
+        scaled_out = (l1_acc + b1_data) >>> <span class="num">10</span>;
+        <span class="kw">if</span>      (scaled_out &lt; 0)   hidden_layer[hidden_cnt] &lt;= <span class="num">8'h00</span>;
+        <span class="kw">else if</span> (scaled_out > 255) hidden_layer[hidden_cnt] &lt;= <span class="num">8'hFF</span>;
+        <span class="kw">else</span>                        hidden_layer[hidden_cnt] &lt;= scaled_out[7:0];
+
+        l1_acc    &lt;= 0;
+        pixel_cnt &lt;= 0;
+        canvas_addrb_reg &lt;= 0;       <span class="cmt">// 다음 노드를 위해 BRAM 주소 초기화</span>
+
+        <span class="kw">if</span> (hidden_cnt &lt; 63) hidden_cnt &lt;= hidden_cnt + 1;
+        <span class="kw">else</span> begin hidden_cnt &lt;= 0; state &lt;= CALC_L2; end
+    end
+end
+</pre>
+
+<h3>포트 목록</h3>
+<table>
+  <tr><th>포트</th><th>방향</th><th>비트</th><th>설명</th></tr>
+  <tr><td><code>clk</code></td><td>입력</td><td>1</td><td>100MHz 시스템 클럭</td></tr>
+  <tr><td><code>reset_p</code></td><td>입력</td><td>1</td><td>active-high 리셋</td></tr>
+  <tr><td><code>start</code></td><td>입력</td><td>1</td><td>1클럭 펄스: 추론 시작 트리거</td></tr>
+  <tr><td><code>canvas_addrb</code></td><td>출력</td><td>10</td><td>BRAM 읽기 주소 (0~783)</td></tr>
+  <tr><td><code>canvas_enb</code></td><td>출력</td><td>1</td><td>BRAM 읽기 인에이블 (항상 1)</td></tr>
+  <tr><td><code>canvas_doutb</code></td><td>입력</td><td>1</td><td>BRAM 픽셀 데이터</td></tr>
+  <tr><td><code>result</code></td><td>출력</td><td>5</td><td>추론 결과 (0=A ~ 25=Z)</td></tr>
+  <tr><td><code>busy</code></td><td>출력</td><td>1</td><td>연산 진행 중 플래그</td></tr>
+  <tr><td><code>done</code></td><td>출력</td><td>1</td><td>연산 완료 1클럭 펄스</td></tr>
+</table>
+</section>
+
+<!-- ==================== 4. npu_axi.v ==================== -->
+<section id="npu_axi">
+<h2>4. npu_axi.v — AXI4-Lite 슬레이브 래퍼</h2>
+
+<div class="card card-green">
+<p>MicroBlaze가 AXI4-Lite 버스로 NPU를 제어하고 결과를 읽는 인터페이스입니다. <code>npu_ctrl</code>을 내부에 인스턴스화합니다.</p>
+</div>
+
+<h3>레지스터 맵</h3>
+<table>
+  <tr><th>오프셋</th><th>이름</th><th>비트 필드</th><th>R/W</th><th>설명</th></tr>
+  <tr><td><code>0x00</code></td><td>CTRL</td><td>[0]=start trigger</td><td>R/W</td><td>1을 쓰면 NPU 시작. done_sticky 초기화.</td></tr>
+  <tr><td><code>0x04</code></td><td>STATUS</td><td>[0]=done_sticky, [1]=busy</td><td>R only</td><td>done은 인식 완료 후 sticky 유지. busy=1이면 연산 중.</td></tr>
+  <tr><td><code>0x08</code></td><td>RESULT</td><td>[4:0]=result</td><td>R only</td><td>최종 알파벳 인덱스 (0=A, 25=Z). done=1 후 안정.</td></tr>
+</table>
+
+<h3>done_sticky 동작</h3>
+<div class="card card-orange">
+<p>NPU core의 <code>npu_done</code>은 1클럭 펄스입니다. AXI 래퍼는 이를 <strong>sticky 레지스터</strong>로 변환하여 MicroBlaze가 폴링(polling)으로 언제든지 완료 여부를 확인할 수 있게 합니다.</p>
+<pre>
+<span class="kw">if</span> (npu_done) begin
+    done_sticky    &lt;= <span class="num">1'b1</span>;         <span class="cmt">// done 펄스 캡처 → sticky</span>
+    result_latched &lt;= npu_result;   <span class="cmt">// 결과도 함께 래치</span>
+end
+<span class="cmt">// CTRL에 start=1을 쓰면 done_sticky 초기화 (새 추론 준비)</span>
+<span class="kw">if</span> (S_AXI_WDATA[0] == <span class="num">1'b1</span>) done_sticky &lt;= <span class="num">1'b0</span>;
+</pre>
+</div>
+
+<h3>npu_start 펄스 생성</h3>
+<pre>
+<span class="cmt">// 매 클럭 초기화</span>
+npu_start &lt;= <span class="num">1'b0</span>;
+
+<span class="kw">if</span> (S_AXI_AWVALID && S_AXI_WVALID && !axi_awready) begin
+    <span class="kw">if</span> (S_AXI_AWADDR[3:2] == <span class="num">2'b00</span> && S_AXI_WDATA[0]) begin
+        npu_start   &lt;= <span class="num">1'b1</span>;  <span class="cmt">// 1클럭 펄스</span>
+        done_sticky &lt;= <span class="num">1'b0</span>;  <span class="cmt">// 이전 완료 클리어</span>
+    end
+end
+</pre>
+
+<h3>MicroBlaze 드라이버 사용 예 (의사코드)</h3>
+<pre>
+<span class="cmt">// 추론 시작</span>
+<span class="fn">Xil_Out32</span>(NPU_BASE + <span class="num">0x00</span>, <span class="num">0x1</span>);   <span class="cmt">// CTRL.start = 1</span>
+
+<span class="cmt">// 완료 대기 (폴링)</span>
+<span class="kw">while</span> ((<span class="fn">Xil_In32</span>(NPU_BASE + <span class="num">0x04</span>) & <span class="num">0x1</span>) == 0) {}  <span class="cmt">// STATUS.done_sticky</span>
+
+<span class="cmt">// 결과 읽기</span>
+<span class="kw">uint32_t</span> result = <span class="fn">Xil_In32</span>(NPU_BASE + <span class="num">0x08</span>) & <span class="num">0x1F</span>;
+<span class="fn">xil_printf</span>(<span class="str">"Result: %c\n"</span>, <span class="str">'A'</span> + result);
+</pre>
+</section>
+
+<!-- ==================== 5. tb_npu.v ==================== -->
+<section id="tb_npu">
+<h2>5. tb_npu.v — NPU 기능 시뮬레이션 테스트벤치</h2>
+
+<div class="card card-green">
+<p>AXI 버스 타이밍을 검증하면서 동시에 NPU 추론 완료 여부를 확인하는 테스트벤치입니다. <code>npu_axi</code>를 직접 인스턴스화하고, AXI 신호를 간단하게 연결하여 <code>start</code> 신호만으로 구동합니다.</p>
+</div>
+
+<h3>가상 BRAM 시뮬레이션</h3>
+<pre>
+<span class="cmt">// 테스트용 784픽셀 메모리 (5픽셀마다 1개 '그려진' 지그재그 패턴)</span>
+<span class="kw">reg</span> virtual_bram [0:783];
+<span class="kw">for</span>(i = 0; i &lt; 784; i = i + 1) begin
+    <span class="kw">if</span> (i % 5 == 0) virtual_bram[i] = <span class="num">1'b1</span>;
+    <span class="kw">else</span>           virtual_bram[i] = <span class="num">1'b0</span>;
+end
+
+<span class="cmt">// Block Design BRAM처럼 1클럭 지연으로 데이터 제공</span>
+<span class="kw">always</span> @(<span class="kw">posedge</span> clk) begin
+    <span class="kw">if</span> (canvas_enb) canvas_doutb &lt;= virtual_bram[canvas_addrb];
+end
+</pre>
+
+<h3>시나리오</h3>
+<div class="card card-purple">
+<h4>시나리오 1 — start 트리거</h4>
+<pre>
+start = <span class="num">1'b1</span>;  #10;   <span class="cmt">// 1클럭(10ns) 유지</span>
+start = <span class="num">1'b0</span>;
+</pre>
+<p>AXI AWVALID+WVALID가 동시에 1이 되므로, <code>npu_axi</code> 내부에서 write_fire 조건이 성립하여 NPU start 펄스가 생성됩니다.</p>
+</div>
+
+<div class="card card-orange">
+<h4>시나리오 2 — busy 플래그 모니터링</h4>
+<pre>
+wait(uut.npu_busy == <span class="num">1'b1</span>);
+$<span class="fn">display</span>(<span class="str">"[TB] NPU 가속기 내부 연산 작동 중..."</span>);
+</pre>
+<p>start 직후 FSM이 LOAD_CANVAS로 진입하면 busy=1이 됩니다.</p>
+</div>
+
+<div class="card card-green">
+<h4>시나리오 3 — done 및 결과 확인</h4>
+<pre>
+wait(uut.npu_done == <span class="num">1'b1</span>);
+$<span class="fn">display</span>(<span class="str">"최종 추론 출력: %d (0=A, 1=B, ...)"</span>, uut.npu_result);
+</pre>
+<p>약 50,000 클럭 이후 done=1이 되면 result에 0~25 범위의 값이 출력됩니다. 패턴에 따라 특정 알파벳으로 분류됩니다.</p>
+</div>
+
+<div class="note">
+<strong>시뮬레이션 소요 시간:</strong> 약 150~160μs (15만 클럭). 시뮬레이터에서 충분한 시뮬레이션 시간을 설정해야 합니다.
+</div>
+</section>
+
+<!-- ==================== 6. tb_npu_axi.v ==================== -->
+<section id="tb_npu_axi">
+<h2>6. tb_npu_axi.v — AXI 버스 레지스터 통합 테스트벤치</h2>
+
+<div class="card card-green">
+<p>AXI 트랜잭션 태스크(<code>axi_write</code>, <code>axi_read</code>)를 정의하고, AXI 버스로 NPU를 제어하는 전체 흐름을 검증합니다. ROM 파일도 직접 로드합니다.</p>
+</div>
+
+<h3>ROM 강제 로드</h3>
+<pre>
+<span class="cmt">// #1: 시뮬레이션 시작 직후 ROM 메모리에 학습된 가중치 강제 주입</span>
+$<span class="fn">readmemh</span>(<span class="str">"training/exported/weights_l1.mem"</span>, dut.npu_core_inst.w1_rom_inst.mem);
+$<span class="fn">readmemh</span>(<span class="str">"training/exported/biases_l1.mem"</span>,  dut.npu_core_inst.b1_rom_inst.mem);
+$<span class="fn">readmemh</span>(<span class="str">"training/exported/weights_l2.mem"</span>, dut.npu_core_inst.w2_rom_inst.mem);
+$<span class="fn">readmemh</span>(<span class="str">"training/exported/biases_l2.mem"</span>,  dut.npu_core_inst.b2_rom_inst.mem);
+</pre>
+
+<h3>테스트 입력 패턴</h3>
+<pre>
+<span class="cmt">// 대각선+격자 패턴 (특정 알파벳과 유사할 수 있음)</span>
+<span class="kw">for</span> (i = 0; i &lt; 784; i = i + 1)
+    canvas_mem[i] = ((i % <span class="num">29</span>) == <span class="num">0</span>) || ((i % <span class="num">28</span>) == <span class="num">7</span>);
+</pre>
+
+<h3>폴링 기반 완료 대기</h3>
+<pre>
+timeout = 0;
+rd = <span class="num">32'd0</span>;
+<span class="kw">while</span> (rd[0] == <span class="num">1'b0</span> && timeout &lt; <span class="num">25000</span>) begin
+    <span class="fn">axi_read</span>(<span class="num">4'h4</span>, rd);   <span class="cmt">// STATUS 레지스터 읽기 [0]=done</span>
+    timeout = timeout + 1;
+end
+<span class="kw">if</span> (timeout >= <span class="num">25000</span>) begin $<span class="fn">display</span>(<span class="str">"FAIL: NPU done timeout"</span>); $finish; end
+</pre>
+
+<h3>결과 검증</h3>
+<pre>
+<span class="fn">axi_read</span>(<span class="num">4'h8</span>, rd);   <span class="cmt">// RESULT 레지스터 읽기</span>
+<span class="kw">if</span> (rd[4:0] > <span class="num">5'd25</span>) begin
+    $<span class="fn">display</span>(<span class="str">"FAIL: RESULT out of range"</span>);
+    $finish;
+end
+$<span class="fn">display</span>(<span class="str">"PASS: result=%0d (0=A, 25=Z)"</span>, rd[4:0]);
+</pre>
+
+<h3>테스트 시나리오 요약</h3>
+<table>
+  <tr><th>순서</th><th>동작</th><th>검증 항목</th></tr>
+  <tr><td>1</td><td>ROM 가중치 강제 로드</td><td>실제 학습된 모델로 추론</td></tr>
+  <tr><td>2</td><td>캔버스 메모리 패턴 설정</td><td>대각선+격자 패턴 주입</td></tr>
+  <tr><td>3</td><td>리셋 후 CTRL 읽기</td><td>초기값 32'd0 확인</td></tr>
+  <tr><td>4</td><td>CTRL에 0x1 쓰기 (start)</td><td>AXI write OKAY 응답</td></tr>
+  <tr><td>5</td><td>STATUS 폴링 (최대 25000회)</td><td>done_sticky=1 또는 timeout</td></tr>
+  <tr><td>6</td><td>RESULT 읽기</td><td>result[4:0] ≤ 25</td></tr>
+</table>
+</section>
+
+<!-- ==================== 7. 예상 파형 ==================== -->
+<section id="waveforms">
+<h2>7. 예상 파형 설명</h2>
+
+<h3>파형 1 — NPU 전체 추론 타임라인 (축약)</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">clk</span><span class="wv-hi">_‾_‾_‾_‾... (100MHz)</span></div>
+<div class="wv-line"><span class="wv-label">start</span><span class="wv-hi">──‾_──────────────────────────────</span></div>
+<div class="wv-line"><span class="wv-label">busy</span><span class="wv-hi">────‾‾‾‾‾‾‾‾...(~51867클럭)...‾‾__</span></div>
+<div class="wv-line"><span class="wv-label">done</span><span class="wv-hi">────────────────────────────────‾_</span></div>
+<div class="wv-line"><span class="wv-label">state</span><span class="wv-data">[IDLE][LC][──CALC_L1──][CALC_L2][ARG][DONE][IDLE]</span></div>
+<div class="wv-line"><span class="wv-label">result</span><span class="wv-data">──────────────────────────────[0~25]──</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">start 펄스 → LOAD_CANVAS(1클럭) → CALC_L1(~50,176클럭) → CALC_L2(~1,664클럭) → ARGMAX(26클럭) → DONE(1클럭) → IDLE. 총 약 51,868 클럭 ≈ 518μs @ 100MHz.</p>
+
+<h3>파형 2 — CALC_L1 내부 루프 (pixel_cnt 순환)</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">hidden_cnt</span><span class="wv-data">[  0  ]────────────────────────[  1  ]────────</span></div>
+<div class="wv-line"><span class="wv-label">pixel_cnt</span><span class="wv-data">[0][1][2][3]...[782][783]─[0][1][2]...</span></div>
+<div class="wv-line"><span class="wv-label">canvas_addrb</span><span class="wv-data">[0][1][2][3]...[782][783][0][1][2]...</span></div>
+<div class="wv-line"><span class="wv-label">canvas_doutb</span><span class="wv-data">──[b0][b1][b2]...[b782][b783][b0]...</span></div>
+<div class="wv-line"><span class="wv-label">l1_acc</span><span class="wv-data">[0][a0][a1][a2]...[a783]─[0][a0]...</span></div>
+<div class="wv-line"><span class="wv-label">hidden_layer[0]</span><span class="wv-data">────────────────────[h0값]──────────</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">pixel_cnt가 0→783 순환하면서 l1_acc에 누적. 783 완료 시 hidden_layer[hidden_cnt]에 ReLU+Clamp 결과 기록 후 hidden_cnt+1. canvas_addrb는 BRAM 1클럭 레이턴시 때문에 pixel_cnt보다 1 앞서서 제공됩니다.</p>
+
+<h3>파형 3 — BRAM 레이턴시 보정</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">clk</span><span class="wv-hi">__‾‾__‾‾__‾‾__‾‾</span></div>
+<div class="wv-line"><span class="wv-label">pixel_cnt</span><span class="wv-data">[ N ][N+1][N+2]</span></div>
+<div class="wv-line"><span class="wv-label">canvas_addrb_reg</span><span class="wv-data">[ N+1][N+2][N+3]</span><span style="color:var(--accent5)"> ← 1클럭 선행</span></div>
+<div class="wv-line"><span class="wv-label">canvas_addrb</span><span class="wv-data">──[ N+1][N+2][N+3]</span><span style="color:var(--muted)"> ← FF 출력</span></div>
+<div class="wv-line"><span class="wv-label">canvas_doutb</span><span class="wv-data">─────[ B[N+1] ][ B[N+2] ]</span><span style="color:var(--accent2)"> ← 1클럭 지연</span></div>
+<div class="wv-line"><span class="wv-label">pixel_uint8(N+1)</span><span class="wv-data">──────────[ B[N+1]→0or255 ]</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">BRAM은 동기식 읽기(synchronous read)이므로 주소를 제시한 클럭의 <em>다음</em> 클럭에 데이터가 나옵니다. 이를 보정하기 위해 canvas_addrb_reg는 pixel_cnt보다 1 앞서 제공됩니다.</p>
+
+<h3>파형 4 — CALC_L2 내부 루프</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">class_cnt</span><span class="wv-data">[  0 (=A)  ]────────────[  1 (=B)  ]──</span></div>
+<div class="wv-line"><span class="wv-label">hidden_cnt</span><span class="wv-data">[0][1][2]...[63]──────[0][1]...</span></div>
+<div class="wv-line"><span class="wv-label">l2_acc</span><span class="wv-data">[0][a0][a1]...[a63]─[0][a0]...</span></div>
+<div class="wv-line"><span class="wv-label">l2_score_buf[0]</span><span class="wv-data">────────────[score_A]──────────</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">class_cnt가 0(A)~25(Z)를 순환하면서 각 알파벳의 점수를 계산합니다. 64번의 MAC 후 l2_score_buf에 저장합니다.</p>
+
+<h3>파형 5 — ARGMAX</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">class_cnt</span><span class="wv-data">[0][1][2][3]...[25]</span></div>
+<div class="wv-line"><span class="wv-label">l2_score_buf[cnt]</span><span class="wv-data">[s0][s1][s2][s3]...[s25]</span></div>
+<div class="wv-line"><span class="wv-label">max_score</span><span class="wv-data">[s0][s0 or s1][max...]──[FINAL_MAX]</span></div>
+<div class="wv-line"><span class="wv-label">result</span><span class="wv-data">[0][0 or 1][...]──────[FINAL_IDX]</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">max_score는 초기값(0x80000000, 최솟값)에서 시작하여, 더 큰 점수가 나타날 때마다 max_score와 result를 갱신합니다. 26클럭 후 result에 최종 알파벳 인덱스가 확정됩니다.</p>
+
+<h3>파형 6 — AXI 쓰기/읽기 사이클 (tb_npu_axi)</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">S_AXI_ACLK</span><span class="wv-hi">__‾‾__‾‾__‾‾__‾‾</span></div>
+<div class="wv-line" style="margin-top:.3rem"><span class="wv-label" style="color:var(--accent5)">── WRITE CTRL=0x1 ──</span></div>
+<div class="wv-line"><span class="wv-label">AWVALID/WVALID</span><span class="wv-hi">────‾‾________────</span></div>
+<div class="wv-line"><span class="wv-label">AWREADY/WREADY</span><span class="wv-hi">──────‾‾______────</span></div>
+<div class="wv-line"><span class="wv-label">BVALID</span><span class="wv-hi">──────────‾‾____──</span></div>
+<div class="wv-line"><span class="wv-label">npu_start</span><span class="wv-hi">──────────‾_──────</span></div>
+<div class="wv-line" style="margin-top:.5rem"><span class="wv-label" style="color:var(--accent5)">── READ STATUS ──</span></div>
+<div class="wv-line"><span class="wv-label">ARVALID</span><span class="wv-hi">────‾‾________</span></div>
+<div class="wv-line"><span class="wv-label">ARREADY</span><span class="wv-hi">──────‾‾______</span></div>
+<div class="wv-line"><span class="wv-label">RVALID</span><span class="wv-hi">──────────‾‾__</span></div>
+<div class="wv-line"><span class="wv-label">RDATA</span><span class="wv-data">──────────[done=1, busy=0]</span></div>
+</div>
+
+<h3>파형 7 — done_sticky 캡처</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">npu_done (core)</span><span class="wv-hi">────────────────‾_────────</span></div>
+<div class="wv-line"><span class="wv-label">done_sticky</span><span class="wv-hi">─────────────────‾‾‾‾‾‾‾‾</span></div>
+<div class="wv-line"><span class="wv-label">result_latched</span><span class="wv-data">─────────────────[0~25 값]</span></div>
+<div class="wv-line"><span class="wv-label">npu_start (next)</span><span class="wv-hi">────────────────────────‾_</span></div>
+<div class="wv-line"><span class="wv-label">done_sticky(cleared)</span><span class="wv-hi">───────────────────────────_</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">npu_done은 1클럭 펄스이지만, done_sticky는 MicroBlaze가 다음 start를 쓸 때까지 High를 유지합니다. 폴링 기반 소프트웨어에서 안전하게 읽을 수 있습니다.</p>
+</section>
+
+<!-- ==================== 8. 연산 사이클 수 ==================== -->
+<section id="timing">
+<h2>8. 연산 사이클 수 분석</h2>
+
+<table>
+  <tr><th>단계</th><th>반복 횟수</th><th>클럭/회</th><th>총 클럭</th><th>시간 (@100MHz)</th></tr>
+  <tr><td>LOAD_CANVAS</td><td>1</td><td>1</td><td>1</td><td>10ns</td></tr>
+  <tr><td>CALC_L1 (pixel 루프)</td><td>64 hidden × 784 pixel</td><td>1</td><td>50,176</td><td>501.76μs</td></tr>
+  <tr><td>CALC_L2 (hidden 루프)</td><td>26 class × 64 hidden</td><td>1</td><td>1,664</td><td>16.64μs</td></tr>
+  <tr><td>ARGMAX</td><td>26 class</td><td>1</td><td>26</td><td>0.26μs</td></tr>
+  <tr><td>DONE</td><td>1</td><td>1</td><td>1</td><td>10ns</td></tr>
+  <tr><td><strong>합계</strong></td><td>—</td><td>—</td><td><strong>~51,868</strong></td><td><strong>~518μs</strong></td></tr>
+</table>
+
+<div class="note">
+<strong>참고:</strong> ROM 읽기 레이턴시(1클럭)로 인해 실제 사이클 수는 위 값보다 약간 더 많을 수 있습니다. tb_npu_axi에서 timeout=25,000을 설정한 것은 테스트가 짧은 시뮬레이션 타임스텝으로 STATUS를 폴링하기 때문이며 (매 AXI 트랜잭션 = 수 클럭), 실제 클럭 기준 ~51,868과는 다릅니다.
+</div>
+
+<h3>최적화 가능성</h3>
+<div class="grid2">
+  <div class="card card-purple">
+    <h4>현재 방식 (직렬 MAC)</h4>
+    <p>매 클럭 1번의 MAC 연산. 단순하지만 ~518μs가 소요됩니다. DSP 블록 1개만 사용합니다.</p>
+  </div>
+  <div class="card card-green">
+    <h4>병렬 MAC 확장 가능</h4>
+    <p>여러 MAC 유닛을 병렬로 두면 수십 배 가속이 가능합니다. DSP 블록을 더 사용하는 대신 레이턴시를 1/N로 줄일 수 있습니다.</p>
+  </div>
+</div>
+</section>
+
+</main>
+<footer>Project 7 HandCipher — NPU 문서 | 2026-06-30</footer>
+</body>
+</html>

@@ -1,0 +1,621 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>VGA 컨트롤러 동작 원리 및 코드 설명</title>
+<style>
+  :root {
+    --bg: #0d1117;
+    --surface: #161b22;
+    --surface2: #1f2937;
+    --border: #30363d;
+    --accent: #58a6ff;
+    --accent2: #3fb950;
+    --accent3: #f78166;
+    --accent4: #d2a8ff;
+    --accent5: #ffa657;
+    --text: #e6edf3;
+    --muted: #8b949e;
+    --code-bg: #0d1117;
+    --hs: #ff7b72;
+    --vs: #79c0ff;
+    --vis: #3fb950;
+    --sync-pulse: #f78166;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { background: var(--bg); color: var(--text); font-family: 'Segoe UI', system-ui, sans-serif; font-size: 15px; line-height: 1.7; }
+
+  header { background: linear-gradient(135deg, #1a2a4a 0%, #0d1a2d 100%); padding: 3rem 2rem; text-align: center; border-bottom: 1px solid var(--border); }
+  header h1 { font-size: 2.4rem; color: var(--accent); margin-bottom: .5rem; }
+  header p { color: var(--muted); font-size: 1rem; }
+
+  nav { position: sticky; top: 0; background: var(--surface); border-bottom: 1px solid var(--border); padding: .6rem 2rem; z-index: 100; display: flex; gap: 1.5rem; flex-wrap: wrap; }
+  nav a { color: var(--accent); text-decoration: none; font-size: .85rem; white-space: nowrap; }
+  nav a:hover { text-decoration: underline; }
+
+  main { max-width: 1100px; margin: 0 auto; padding: 2rem; }
+
+  section { margin-bottom: 3rem; }
+  h2 { font-size: 1.6rem; color: var(--accent); border-bottom: 2px solid var(--border); padding-bottom: .5rem; margin-bottom: 1.2rem; }
+  h3 { font-size: 1.2rem; color: var(--accent4); margin: 1.5rem 0 .7rem; }
+  h4 { font-size: 1rem; color: var(--accent5); margin: 1.2rem 0 .5rem; }
+  p { margin-bottom: .8rem; }
+
+  .card { background: var(--surface); border: 1px solid var(--border); border-radius: 8px; padding: 1.5rem; margin-bottom: 1.2rem; }
+  .card-accent { border-left: 4px solid var(--accent); }
+  .card-green  { border-left: 4px solid var(--accent2); }
+  .card-red    { border-left: 4px solid var(--accent3); }
+  .card-purple { border-left: 4px solid var(--accent4); }
+  .card-orange { border-left: 4px solid var(--accent5); }
+
+  code { font-family: 'Consolas', 'JetBrains Mono', monospace; font-size: .88rem; background: var(--code-bg); padding: .1rem .4rem; border-radius: 3px; color: var(--accent2); }
+  pre { background: var(--code-bg); border: 1px solid var(--border); border-radius: 8px; padding: 1.2rem; overflow-x: auto; font-family: 'Consolas', monospace; font-size: .82rem; line-height: 1.6; margin: .8rem 0 1.2rem; }
+  pre .kw  { color: #ff7b72; }
+  pre .sig { color: #79c0ff; }
+  pre .str { color: #a5d6ff; }
+  pre .cmt { color: #8b949e; font-style: italic; }
+  pre .num { color: #ffa657; }
+  pre .fn  { color: #d2a8ff; }
+  pre .par { color: #e6edf3; }
+
+  table { width: 100%; border-collapse: collapse; margin: .8rem 0 1.2rem; }
+  th { background: var(--surface2); color: var(--accent); padding: .6rem 1rem; text-align: left; border: 1px solid var(--border); font-size: .9rem; }
+  td { padding: .55rem 1rem; border: 1px solid var(--border); font-size: .88rem; }
+  tr:nth-child(even) td { background: rgba(255,255,255,.03); }
+
+  /* VGA timing diagram */
+  .timing-wrap { overflow-x: auto; padding: .5rem 0; }
+  svg text { font-family: 'Consolas', monospace; }
+
+  .grid2 { display: grid; grid-template-columns: 1fr 1fr; gap: 1rem; }
+  @media(max-width:700px){ .grid2 { grid-template-columns: 1fr; } }
+
+  .tag { display: inline-block; padding: .15rem .5rem; border-radius: 4px; font-size: .75rem; font-weight: 600; margin-right: .3rem; }
+  .tag-blue   { background: rgba(88,166,255,.15); color: var(--accent); }
+  .tag-green  { background: rgba(63,185,80,.15);  color: var(--accent2); }
+  .tag-red    { background: rgba(247,129,102,.15);color: var(--accent3); }
+  .tag-purple { background: rgba(210,168,255,.15);color: var(--accent4); }
+  .tag-orange { background: rgba(255,166,87,.15); color: var(--accent5); }
+
+  .waveform { background: #0d1117; border: 1px solid var(--border); border-radius: 8px; overflow-x: auto; padding: 1rem; font-family: monospace; font-size: .78rem; }
+  .wv-label { color: var(--muted); display: inline-block; width: 140px; text-align: right; padding-right: 12px; }
+  .wv-line  { display: flex; align-items: center; margin-bottom: 4px; }
+  .wv-hi    { color: var(--accent2); }
+  .wv-lo    { color: var(--accent3); }
+  .wv-data  { color: var(--accent4); }
+  .wv-sync  { color: var(--accent5); }
+
+  .note { background: rgba(88,166,255,.08); border: 1px solid rgba(88,166,255,.3); border-radius: 6px; padding: .8rem 1rem; margin: .8rem 0; font-size: .9rem; }
+  .warn { background: rgba(255,166,87,.08); border: 1px solid rgba(255,166,87,.3); border-radius: 6px; padding: .8rem 1rem; margin: .8rem 0; font-size: .9rem; }
+
+  footer { text-align: center; padding: 2rem; color: var(--muted); font-size: .85rem; border-top: 1px solid var(--border); margin-top: 2rem; }
+</style>
+</head>
+<body>
+
+<header>
+  <h1>VGA 컨트롤러</h1>
+  <p>동작 원리 · 코드 분석 · 테스트벤치 · 예상 파형</p>
+</header>
+
+<nav>
+  <a href="#principle">1. VGA 동작원리</a>
+  <a href="#timing">2. 타이밍 파라미터</a>
+  <a href="#vga_ctrl">3. vga_ctrl.v</a>
+  <a href="#vga_axi">4. vga_axi.v</a>
+  <a href="#tb_vga">5. tb_vga.v</a>
+  <a href="#tb_vga_axi">6. tb_vga_axi.v</a>
+  <a href="#waveforms">7. 예상 파형</a>
+</nav>
+
+<main>
+
+<!-- ==================== 1. VGA 동작원리 ==================== -->
+<section id="principle">
+<h2>1. VGA 동작 원리</h2>
+
+<div class="card card-accent">
+<h3>VGA 신호란?</h3>
+<p>VGA(Video Graphics Array)는 아날로그 RGB 신호와 두 개의 동기 신호(Hsync, Vsync)로 화면을 구성합니다. 모니터는 이 신호를 받아 전자빔(또는 픽셀 행렬)으로 화면을 좌→우, 위→아래 순서로 그립니다.</p>
+</div>
+
+<h3>래스터 스캔(Raster Scan) 방식</h3>
+<p>VGA는 <strong>래스터 스캔</strong> 방식으로 동작합니다. 전체 화면은 한 픽셀씩 좌에서 우로 스캔하고, 한 줄이 끝나면 다음 줄로 내려가는 것을 반복합니다.</p>
+
+<div class="grid2">
+  <div class="card card-green">
+    <h4>수평 스캔 (1줄 = 800 픽셀 클럭)</h4>
+    <ul style="padding-left:1.2rem">
+      <li><span class="tag tag-green">VISIBLE</span> 640 픽셀 — 실제 화상 출력</li>
+      <li><span class="tag tag-blue">FRONT</span> 16 픽셀 — 앞 포치(blank)</li>
+      <li><span class="tag tag-red">HSYNC</span> 96 픽셀 — 동기 펄스(active-low)</li>
+      <li><span class="tag tag-orange">BACK</span> 48 픽셀 — 뒤 포치(blank)</li>
+    </ul>
+  </div>
+  <div class="card card-purple">
+    <h4>수직 스캔 (1프레임 = 525 라인)</h4>
+    <ul style="padding-left:1.2rem">
+      <li><span class="tag tag-green">VISIBLE</span> 480 라인 — 실제 화상 출력</li>
+      <li><span class="tag tag-blue">FRONT</span> 10 라인 — 앞 포치</li>
+      <li><span class="tag tag-red">VSYNC</span> 2 라인 — 수직 동기 펄스(active-low)</li>
+      <li><span class="tag tag-orange">BACK</span> 33 라인 — 뒤 포치</li>
+    </ul>
+  </div>
+</div>
+
+<h3>픽셀 클럭 계산</h3>
+<div class="card card-orange">
+<p>표준 VGA 640×480 @ 60Hz 기준 픽셀 클럭: <strong>25.175 MHz</strong></p>
+<p>본 프로젝트는 <strong>100 MHz</strong> 시스템 클럭을 사용하므로, 내부적으로 <code>pix_phase</code> 카운터(0~3)로 4분주하여 픽셀당 4클럭 = 실효 25 MHz를 구현합니다.</p>
+<pre>픽셀 클럭 = 100MHz / 4 = 25MHz
+프레임 레이트 = 25,000,000 / (800 × 525) ≈ 59.5 Hz</pre>
+</div>
+
+<h3>출력 신호 구성</h3>
+<table>
+  <tr><th>신호</th><th>비트 수</th><th>설명</th></tr>
+  <tr><td><code>vgaRed</code></td><td>4비트</td><td>적색 채널 (RGB444 포맷)</td></tr>
+  <tr><td><code>vgaGreen</code></td><td>4비트</td><td>녹색 채널</td></tr>
+  <tr><td><code>vgaBlue</code></td><td>4비트</td><td>청색 채널</td></tr>
+  <tr><td><code>Hsync</code></td><td>1비트</td><td>수평 동기 (active-low)</td></tr>
+  <tr><td><code>Vsync</code></td><td>1비트</td><td>수직 동기 (active-low)</td></tr>
+</table>
+
+<div class="note">
+<strong>Active-low 동기 신호:</strong> Hsync와 Vsync는 평상시 High(1)를 유지하다가 동기 펄스 구간에서만 Low(0)로 떨어집니다. 모니터는 이 Low 구간을 기준으로 줄 시작/화면 시작을 인식합니다.
+</div>
+
+<h3>두 가지 렌더링 모드</h3>
+<div class="grid2">
+  <div class="card card-green">
+    <h4>문자 모드 (canvas_mode = 0)</h4>
+    <p>화면을 40열 × 30행 = <strong>1200개</strong> 문자 셀로 나눕니다. 각 셀은 16×16 픽셀이며, <code>font_rom</code>에서 해당 ASCII 코드의 글리프 비트맵을 읽어 전경색/배경색으로 렌더링합니다.</p>
+  </div>
+  <div class="card card-purple">
+    <h4>캔버스 프리뷰 모드 (canvas_mode = 1)</h4>
+    <p>화면 좌상단 (x=16, y=48) 기준 224×224 픽셀 영역에 28×28 손글씨 캔버스를 8배 확대(픽셀당 8×8 블록)하여 표시합니다. 나머지 영역은 문자 모드로 계속 렌더링됩니다.</p>
+  </div>
+</div>
+</section>
+
+<!-- ==================== 2. 타이밍 파라미터 ==================== -->
+<section id="timing">
+<h2>2. VGA 타이밍 파라미터</h2>
+
+<div class="timing-wrap">
+<svg width="900" height="200" viewBox="0 0 900 200" style="min-width:700px;">
+  <!-- 배경 -->
+  <rect width="900" height="200" fill="#0d1117"/>
+
+  <!-- 수평 타이밍 다이어그램 -->
+  <!-- 전체 1줄 = 800픽셀 → 스케일 800px → 1.0px/pixel -->
+  <!-- VISIBLE 0~639 (640px → 480px scaled to 640px/900*800) -->
+
+  <!-- 라벨 -->
+  <text x="10" y="30" fill="#8b949e" font-size="11">Hsync</text>
+  <text x="10" y="80" fill="#8b949e" font-size="11">h_cnt</text>
+  <text x="10" y="130" fill="#8b949e" font-size="11">vgaRGB</text>
+  <text x="10" y="170" fill="#8b949e" font-size="11">구간</text>
+
+  <!-- 수평선 베이스 -->
+  <line x1="100" y1="35" x2="890" y2="35" stroke="#30363d" stroke-width="1"/>
+  <line x1="100" y1="85" x2="890" y2="85" stroke="#30363d" stroke-width="1"/>
+  <line x1="100" y1="135" x2="890" y2="135" stroke="#30363d" stroke-width="1"/>
+
+  <!-- VISIBLE 구간 (640/800*790=632px) -->
+  <rect x="100" y="18" width="632" height="14" fill="rgba(63,185,80,0.3)" stroke="#3fb950" stroke-width="1" rx="2"/>
+  <text x="366" y="29" fill="#3fb950" font-size="10" text-anchor="middle">VISIBLE  640 px</text>
+
+  <!-- FRONT 구간 (16/800*790=16px) -->
+  <rect x="732" y="18" width="16" height="14" fill="rgba(88,166,255,0.3)" stroke="#58a6ff" stroke-width="1" rx="2"/>
+
+  <!-- SYNC 구간 (96/800*790=95px) -->
+  <rect x="748" y="18" width="95" height="14" fill="rgba(247,129,102,0.4)" stroke="#f78166" stroke-width="1" rx="2"/>
+  <text x="795" y="29" fill="#f78166" font-size="10" text-anchor="middle">SYNC 96</text>
+
+  <!-- BACK 구간 (48/800*790=47px) -->
+  <rect x="843" y="18" width="47" height="14" fill="rgba(255,166,87,0.3)" stroke="#ffa657" stroke-width="1" rx="2"/>
+
+  <!-- Hsync 파형 -->
+  <polyline points="100,55 732,55 732,65 748,65 748,55 843,55 843,55" fill="none" stroke="#79c0ff" stroke-width="2"/>
+  <!-- Sync 구간에서 Low -->
+  <polyline points="748,55 748,65 843,65 843,55" fill="none" stroke="#f78166" stroke-width="2"/>
+  <!-- baseline -->
+  <line x1="100" y1="55" x2="730" y2="55" stroke="#79c0ff" stroke-width="2"/>
+  <line x1="845" y1="55" x2="890" y2="55" stroke="#79c0ff" stroke-width="2"/>
+
+  <!-- h_cnt 값 표시 -->
+  <rect x="100" y="72" width="632" height="18" fill="rgba(63,185,80,0.2)" stroke="#3fb950" stroke-width="1" rx="2"/>
+  <text x="366" y="84" fill="#3fb950" font-size="10" text-anchor="middle">0 ~ 639</text>
+  <rect x="732" y="72" width="16" height="18" fill="rgba(88,166,255,0.2)" stroke="#58a6ff" stroke-width="1" rx="2"/>
+  <text x="740" y="84" fill="#58a6ff" font-size="8" text-anchor="middle">640+</text>
+  <rect x="748" y="72" width="95" height="18" fill="rgba(247,129,102,0.2)" stroke="#f78166" stroke-width="1" rx="2"/>
+  <text x="795" y="84" fill="#f78166" font-size="10" text-anchor="middle">656~751</text>
+  <rect x="843" y="72" width="47" height="18" fill="rgba(255,166,87,0.2)" stroke="#ffa657" stroke-width="1" rx="2"/>
+  <text x="866" y="84" fill="#ffa657" font-size="8" text-anchor="middle">752~</text>
+
+  <!-- RGB 신호 -->
+  <rect x="100" y="122" width="632" height="18" fill="rgba(210,168,255,0.3)" stroke="#d2a8ff" stroke-width="1" rx="2"/>
+  <text x="366" y="134" fill="#d2a8ff" font-size="10" text-anchor="middle">fg_color / bg_color (픽셀 데이터 출력)</text>
+  <rect x="732" y="122" width="158" height="18" fill="rgba(13,17,23,0.9)" stroke="#30363d" stroke-width="1" rx="2"/>
+  <text x="811" y="134" fill="#8b949e" font-size="10" text-anchor="middle">000 (black, blank 기간)</text>
+
+  <!-- 구간 라벨 -->
+  <text x="366" y="165" fill="#3fb950" font-size="10" text-anchor="middle">Active Video</text>
+  <text x="740" y="165" fill="#58a6ff" font-size="9" text-anchor="middle">FP</text>
+  <text x="795" y="165" fill="#f78166" font-size="10" text-anchor="middle">HSync Pulse</text>
+  <text x="866" y="165" fill="#ffa657" font-size="9" text-anchor="middle">BP</text>
+
+  <!-- 세로 구분선 -->
+  <line x1="732" y1="15" x2="732" y2="150" stroke="#30363d" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="748" y1="15" x2="748" y2="150" stroke="#f78166" stroke-width="1" stroke-dasharray="3,3"/>
+  <line x1="843" y1="15" x2="843" y2="150" stroke="#30363d" stroke-width="1" stroke-dasharray="3,3"/>
+</svg>
+</div>
+
+<table>
+  <tr><th>파라미터</th><th>수평(H)</th><th>수직(V)</th><th>단위</th></tr>
+  <tr><td>VISIBLE</td><td>640</td><td>480</td><td>픽셀 / 라인</td></tr>
+  <tr><td>FRONT PORCH</td><td>16</td><td>10</td><td>픽셀 / 라인</td></tr>
+  <tr><td>SYNC PULSE</td><td>96</td><td>2</td><td>픽셀 / 라인</td></tr>
+  <tr><td>BACK PORCH</td><td>48</td><td>33</td><td>픽셀 / 라인</td></tr>
+  <tr><td><strong>TOTAL</strong></td><td><strong>800</strong></td><td><strong>525</strong></td><td>픽셀 / 라인</td></tr>
+</table>
+</section>
+
+<!-- ==================== 3. vga_ctrl.v ==================== -->
+<section id="vga_ctrl">
+<h2>3. vga_ctrl.v — VGA 렌더링 엔진</h2>
+
+<div class="card card-accent">
+<p>VGA 실제 동작의 핵심 모듈입니다. 픽셀 위치 카운터, 문자/캔버스 버퍼, 폰트 ROM 조회, 색상 렌더링, 동기 신호 생성을 모두 담당합니다.</p>
+</div>
+
+<h3>모듈 파라미터 및 포트</h3>
+<pre>
+<span class="kw">module</span> <span class="fn">vga_ctrl</span> <span class="par">#(</span>
+    <span class="kw">parameter</span> FONT_MEM_FILE = <span class="str">"font_rom.mem"</span>  <span class="cmt">// 폰트 비트맵 파일 경로</span>
+<span class="par">)(</span>
+    <span class="cmt">// 시스템 클럭 / 리셋</span>
+    <span class="kw">input</span>  clk, reset_p,
+
+    <span class="cmt">// 제어 입력</span>
+    <span class="kw">input</span>  enable,       <span class="cmt">// 0=화면 꺼짐(전체 검정), 1=정상 출력</span>
+    <span class="kw">input</span>  clear,        <span class="cmt">// 1-클럭 펄스: 문자버퍼 전체를 space(0x20)로 초기화</span>
+    <span class="kw">input</span>  canvas_mode,  <span class="cmt">// 0=문자 전용, 1=캔버스 프리뷰 합성</span>
+
+    <span class="cmt">// 문자 버퍼 Write 포트</span>
+    <span class="kw">input</span> [10:0] char_wr_addr,  <span class="cmt">// 0~1199 (40열 × 30행)</span>
+    <span class="kw">input</span>  [7:0] char_wr_data,  <span class="cmt">// ASCII 코드</span>
+    <span class="kw">input</span>        char_wr_en,
+
+    <span class="cmt">// 캔버스 버퍼 Write 포트</span>
+    <span class="kw">input</span>  [9:0] canvas_wr_addr, <span class="cmt">// 0~783 (28×28)</span>
+    <span class="kw">input</span>        canvas_wr_data, <span class="cmt">// 1=흰, 0=검</span>
+    <span class="kw">input</span>        canvas_wr_en,
+
+    <span class="cmt">// 색상</span>
+    <span class="kw">input</span> [11:0] fg_color,       <span class="cmt">// RGB444 전경색</span>
+    <span class="kw">input</span> [11:0] bg_color,       <span class="cmt">// RGB444 배경색</span>
+
+    <span class="cmt">// VGA 출력</span>
+    <span class="kw">output reg</span> [3:0] vgaRed, vgaGreen, vgaBlue,
+    <span class="kw">output reg</span>       Hsync, Vsync,
+    <span class="kw">output wire</span>      clear_busy   <span class="cmt">// clear 진행 중 플래그</span>
+<span class="par">);</span>
+</pre>
+
+<h3>내부 버퍼 구조</h3>
+<div class="grid2">
+  <div class="card card-green">
+    <h4>문자 버퍼 (char_buf)</h4>
+    <p><code>reg [7:0] char_buf [0:1199]</code></p>
+    <p>1200개 ASCII 코드를 저장. <code>distributed RAM</code>으로 추론됩니다 (포트 B 읽기 1클럭 지연).</p>
+    <ul style="padding-left:1.2rem; margin-top:.5rem;">
+      <li>주소 = <code>char_row × 40 + char_col</code></li>
+      <li>row = <code>v_cnt[8:4]</code> (0~29)</li>
+      <li>col = <code>h_cnt[9:4]</code> (0~39)</li>
+    </ul>
+  </div>
+  <div class="card card-purple">
+    <h4>캔버스 버퍼 (canvas_buf)</h4>
+    <p><code>reg canvas_buf [0:783]</code></p>
+    <p>784개 1비트 픽셀. 28×28 손글씨 영역을 저장합니다.</p>
+    <ul style="padding-left:1.2rem; margin-top:.5rem;">
+      <li>주소 = <code>preview_y × 28 + preview_x</code></li>
+      <li>프리뷰 픽셀 = 8×8 블록으로 확대 표시</li>
+    </ul>
+  </div>
+</div>
+
+<h3>3단계 파이프라인 (pix_phase 0→1→2→3)</h3>
+<p>폰트 ROM이 블록 RAM(1클럭 레이턴시)이므로, 픽셀 데이터를 미리 준비하기 위해 4-phase 파이프라인을 사용합니다.</p>
+
+<table>
+  <tr><th>Phase</th><th>동작</th><th>신호</th></tr>
+  <tr><td><code>0</code></td><td>char_buf / canvas_buf 읽기 요청 (combinatorial)</td><td><code>char_code_q</code>, <code>canvas_pixel_q</code> 래치</td></tr>
+  <tr><td><code>1</code></td><td>폰트 ROM 주소 계산 및 요청 전달</td><td><code>visible_d</code>, <code>char_x_d</code>, <code>canvas_pixel_d</code> 래치</td></tr>
+  <tr><td><code>2</code></td><td>폰트 ROM 출력 대기 (1클럭 레이턴시)</td><td><code>font_data</code> 안정화</td></tr>
+  <tr><td><code>3</code></td><td>최종 색상 결정 + h/v 카운터 증가 + 동기 신호 출력</td><td><code>vgaRed/Green/Blue</code>, <code>Hsync</code>, <code>Vsync</code></td></tr>
+</table>
+
+<h3>렌더링 우선순위 (Phase 3)</h3>
+<pre>
+<span class="kw">if</span> (!enable || !visible_d) begin
+    render_color = <span class="num">12'h000</span>;           <span class="cmt">// 꺼짐 또는 blanking 구간 → 검정</span>
+end <span class="kw">else if</span> (in_preview_d) begin
+    render_color = canvas_pixel_d ? <span class="num">12'hFFF</span> : <span class="num">12'h000</span>;  <span class="cmt">// 캔버스: 흰/검</span>
+end <span class="kw">else if</span> (text_pixel_on) begin
+    render_color = fg_color;           <span class="cmt">// 폰트 비트=1 → 전경색</span>
+end <span class="kw">else</span> begin
+    render_color = bg_color;           <span class="cmt">// 폰트 비트=0 → 배경색</span>
+end
+</pre>
+
+<h3>clear 동작</h3>
+<div class="card card-orange">
+<p>1클럭 <code>clear</code> 펄스가 들어오면 <code>clear_active</code> 플래그가 Set되고, <code>clear_idx</code>가 0에서 1199까지 증가하면서 매 클럭 <code>char_buf[clear_idx] ← 0x20(space)</code>를 씁니다. 1200 클럭(12μs @ 100MHz) 후 완료되면 <code>clear_active</code>가 해제됩니다.</p>
+</div>
+
+<h3>캔버스 프리뷰 주소 계산</h3>
+<pre>
+<span class="cmt">// 프리뷰 영역: 화면상 (16,48) ~ (240,272), 224x224 픽셀</span>
+<span class="kw">wire</span> [4:0] preview_x = (h_cnt - <span class="num">PREVIEW_X0</span>) >> <span class="num">3</span>;  <span class="cmt">// 8픽셀 = 1셀</span>
+<span class="kw">wire</span> [4:0] preview_y = (v_cnt - <span class="num">PREVIEW_Y0</span>) >> <span class="num">3</span>;
+<span class="kw">wire</span> [9:0] canvas_rd_addr =
+    ({5'd0, preview_y} &lt;&lt; 5) - ({5'd0, preview_y} &lt;&lt; 2) + {5'd0, preview_x};
+<span class="cmt">// = preview_y * 28 + preview_x  (32 - 4 = 28 계산)</span>
+</pre>
+
+<h3>동기 신호 생성</h3>
+<pre>
+<span class="cmt">// Hsync: h_cnt가 656~751 구간에서 Low</span>
+Hsync &lt;= ~((h_cnt >= (<span class="num">H_VISIBLE</span> + <span class="num">H_FRONT</span>)) &&
+            (h_cnt &lt;  (<span class="num">H_VISIBLE</span> + <span class="num">H_FRONT</span> + <span class="num">H_SYNC</span>)));
+<span class="cmt">// Vsync: v_cnt가 490~491 구간에서 Low</span>
+Vsync &lt;= ~((v_cnt >= (<span class="num">V_VISIBLE</span> + <span class="num">V_FRONT</span>)) &&
+            (v_cnt &lt;  (<span class="num">V_VISIBLE</span> + <span class="num">V_FRONT</span> + <span class="num">V_SYNC</span>)));
+</pre>
+</section>
+
+<!-- ==================== 4. vga_axi.v ==================== -->
+<section id="vga_axi">
+<h2>4. vga_axi.v — AXI4-Lite 슬레이브 래퍼</h2>
+
+<div class="card card-accent">
+<p>MicroBlaze 프로세서(또는 PS)가 AXI4-Lite 버스로 VGA 컨트롤러를 제어할 수 있도록 레지스터 맵을 제공하는 래퍼 모듈입니다. <code>vga_ctrl</code>을 내부에 인스턴스화합니다.</p>
+</div>
+
+<h3>레지스터 맵</h3>
+<table>
+  <tr><th>오프셋</th><th>이름</th><th>비트 필드</th><th>설명</th></tr>
+  <tr><td><code>0x00</code></td><td>CTRL</td><td>[0]=enable, [1]=clear</td><td>VGA 활성화, 화면 지우기 트리거</td></tr>
+  <tr><td><code>0x04</code></td><td>CHAR_ADDR</td><td>[10:0]</td><td>쓸 문자 버퍼 위치 (0~1199)</td></tr>
+  <tr><td><code>0x08</code></td><td>CHAR_DATA</td><td>[7:0]</td><td>ASCII 문자 코드</td></tr>
+  <tr><td><code>0x0C</code></td><td>WR_STRB</td><td>[0]=trigger</td><td>1을 쓰면 char_wr_en 펄스 생성</td></tr>
+  <tr><td><code>0x10</code></td><td>FG_COLOR</td><td>[11:0]</td><td>전경색 RGB444</td></tr>
+  <tr><td><code>0x14</code></td><td>BG_COLOR</td><td>[11:0]</td><td>배경색 RGB444</td></tr>
+  <tr><td><code>0x18</code></td><td>CANVAS_WR_ADDR</td><td>[9:0]</td><td>캔버스 쓰기 주소 (0~783)</td></tr>
+  <tr><td><code>0x1C</code></td><td>CANVAS_WR_DATA</td><td>[0]</td><td>캔버스 픽셀값 (0 또는 1)</td></tr>
+  <tr><td><code>0x20</code></td><td>CANVAS_WR_EN</td><td>[0]=trigger</td><td>1을 쓰면 canvas_wr_en 펄스 생성</td></tr>
+  <tr><td><code>0x24</code></td><td>CANVAS_MODE</td><td>[0]</td><td>0=문자모드, 1=캔버스 합성모드</td></tr>
+</table>
+
+<h3>AXI4-Lite Write 핸드셰이크</h3>
+<pre>
+<span class="cmt">// AWVALID && WVALID && !axi_awready (이전 응답이 없는 상태)일 때만 처리</span>
+<span class="kw">wire</span> write_fire = S_AXI_AWVALID && S_AXI_WVALID &&
+                   !axi_awready && !axi_wready && !axi_bvalid;
+
+<span class="kw">if</span> (write_fire) begin
+    axi_awready &lt;= <span class="num">1'b1</span>;  <span class="cmt">// 주소 수락</span>
+    axi_wready  &lt;= <span class="num">1'b1</span>;  <span class="cmt">// 데이터 수락</span>
+    axi_bvalid  &lt;= <span class="num">1'b1</span>;  <span class="cmt">// 쓰기 응답 준비</span>
+    <span class="cmt">// case로 레지스터 주소 디코딩 및 값 저장</span>
+end
+</pre>
+
+<h3>펄스 신호 생성 방식</h3>
+<div class="card card-green">
+<p><code>char_wr_en</code>, <code>canvas_wr_en</code>, <code>clear</code>는 <strong>1클럭 펄스</strong>로만 동작해야 합니다. AXI 쓰기 사이클마다 매 클럭 초기화하고, 해당 레지스터 주소에 1이 쓰일 때만 1로 Set합니다:</p>
+<pre>
+<span class="cmt">// 매 클럭 초기화 (pulse 폭 = 1클럭 보장)</span>
+clear_pulse     &lt;= <span class="num">1'b0</span>;
+char_wr_pulse   &lt;= <span class="num">1'b0</span>;
+canvas_wr_pulse &lt;= <span class="num">1'b0</span>;
+
+<span class="kw">if</span> (write_fire) begin
+    <span class="kw">case</span> (wr_addr_word)
+        ADDR_WR_STRB: <span class="kw">if</span> (S_AXI_WDATA[0]) char_wr_pulse &lt;= <span class="num">1'b1</span>;
+        ...
+    <span class="kw">endcase</span>
+end
+</pre>
+</div>
+</section>
+
+<!-- ==================== 5. tb_vga.v ==================== -->
+<section id="tb_vga">
+<h2>5. tb_vga.v — vga_ctrl 직접 테스트벤치</h2>
+
+<div class="card card-accent">
+<p>AXI 없이 <code>vga_ctrl</code> 모듈을 직접 구동하여 내부 버퍼 동작과 VGA 타이밍을 검증합니다. 5가지 핵심 시나리오를 순서대로 실행합니다.</p>
+</div>
+
+<h3>테스트 시나리오</h3>
+
+<div class="card card-green">
+<h4>시나리오 1 — 문자 버퍼 쓰기 검증</h4>
+<pre>
+<span class="fn">write_char</span>(<span class="num">11'd0</span>, <span class="num">8'h41</span>);  <span class="cmt">// 주소 0에 'A' 쓰기</span>
+<span class="kw">if</span> (uut.char_buf[<span class="num">0</span>] !== <span class="num">8'h41</span>) $fatal; <span class="cmt">// RAM 값 확인</span>
+</pre>
+<p><code>write_char</code> task: addr/data 설정 → <code>char_wr_en=1</code> → 다음 클럭 → <code>char_wr_en=0</code></p>
+</div>
+
+<div class="card card-purple">
+<h4>시나리오 2 — 캔버스 버퍼 쓰기 검증</h4>
+<pre>
+<span class="fn">write_canvas</span>(<span class="num">10'd0</span>, <span class="num">1'b1</span>);  <span class="cmt">// 픽셀 0번을 흰색(1)으로 설정</span>
+<span class="kw">if</span> (uut.canvas_buf[<span class="num">0</span>] !== <span class="num">1'b1</span>) $fatal;
+</pre>
+</div>
+
+<div class="card card-orange">
+<h4>시나리오 3 — clear 기능 검증</h4>
+<pre>
+<span class="fn">pulse_clear</span>();             <span class="cmt">// 1클럭 clear 펄스</span>
+wait (clear_busy == <span class="num">1'b1</span>);  <span class="cmt">// clear 시작 확인</span>
+wait (clear_busy == <span class="num">1'b0</span>);  <span class="cmt">// 1200클럭 후 완료 대기</span>
+<span class="cmt">// char_buf[0]과 [1199] 모두 0x20(space)인지 확인</span>
+</pre>
+</div>
+
+<div class="card card-blue" style="border-left:4px solid var(--accent)">
+<h4>시나리오 4 — 라인 롤오버 검증</h4>
+<pre>
+<span class="fn">wait_pixel</span>(<span class="num">10'd799</span>, <span class="num">10'd0</span>);  <span class="cmt">// h=799, v=0 픽셀까지 대기</span>
+@(posedge clk);
+<span class="cmt">// 다음 클럭에 h_cnt=0, v_cnt=1이어야 함</span>
+<span class="kw">if</span> (uut.h_cnt !== <span class="num">10'd0</span> || uut.v_cnt !== <span class="num">10'd1</span>) $fatal;
+</pre>
+</div>
+
+<div class="card card-red">
+<h4>시나리오 5 — Hsync 폭 검증</h4>
+<pre>
+<span class="fn">wait_pixel</span>(<span class="num">10'd0</span>, <span class="num">10'd2</span>);
+<span class="cmt">// v_cnt=2 줄 전체에서 Hsync=0인 픽셀 카운트</span>
+<span class="kw">while</span> (uut.v_cnt == <span class="num">10'd2</span>) begin
+    <span class="kw">if</span> (uut.pix_phase == <span class="num">2'd3</span> && Hsync == <span class="num">1'b0</span>)
+        hsync_low_pixels = hsync_low_pixels + <span class="num">1</span>;
+    @(posedge clk);
+end
+<span class="kw">if</span> (hsync_low_pixels != <span class="num">96</span>) $fatal;  <span class="cmt">// 반드시 96이어야 함</span>
+</pre>
+</div>
+</section>
+
+<!-- ==================== 6. tb_vga_axi.v ==================== -->
+<section id="tb_vga_axi">
+<h2>6. tb_vga_axi.v — AXI 버스 통합 테스트벤치</h2>
+
+<div class="card card-accent">
+<p><code>vga_axi</code> 전체를 테스트합니다. AXI 핸드셰이크를 직접 구동하여 레지스터 맵 동작과 VGA 타이밍을 동시에 검증합니다.</p>
+</div>
+
+<h3>AXI 태스크 정의</h3>
+<pre>
+<span class="kw">task</span> <span class="fn">axi_write</span>;
+    <span class="cmt">// 1. awaddr + wdata 설정</span>
+    <span class="cmt">// 2. awvalid=1, wvalid=1 Assert</span>
+    <span class="cmt">// 3. awready && wready 대기 → Deassert</span>
+    <span class="cmt">// 4. bvalid 대기 → bresp == 2'b00(OKAY) 확인</span>
+<span class="kw">endtask</span>
+
+<span class="kw">task</span> <span class="fn">axi_read</span>;
+    <span class="cmt">// 1. araddr 설정, arvalid=1</span>
+    <span class="cmt">// 2. arready 대기 → arvalid=0</span>
+    <span class="cmt">// 3. rvalid 대기 → rdata 캡처</span>
+    <span class="cmt">// 4. rresp == 2'b00(OKAY) 확인</span>
+<span class="kw">endtask</span>
+</pre>
+
+<h3>문자 쓰기 시퀀스</h3>
+<pre>
+<span class="kw">task</span> <span class="fn">vga_write_char</span>;
+    <span class="fn">axi_write</span>(<span class="num">6'h04</span>, {21'd0, addr});  <span class="cmt">// CHAR_ADDR 설정</span>
+    <span class="fn">axi_write</span>(<span class="num">6'h08</span>, {24'd0, ch});   <span class="cmt">// CHAR_DATA 설정</span>
+    <span class="fn">axi_write</span>(<span class="num">6'h0C</span>, <span class="num">32'h1</span>);          <span class="cmt">// WR_STRB 트리거 (char_wr_en 펄스 생성)</span>
+<span class="kw">endtask</span>
+</pre>
+
+<h3>테스트 시나리오 요약</h3>
+<table>
+  <tr><th>순서</th><th>동작</th><th>검증 항목</th></tr>
+  <tr><td>1</td><td>리셋 후 CTRL 읽기</td><td>초기값 enable=1 확인 (<code>rd[0]==1</code>)</td></tr>
+  <tr><td>2</td><td>'H', 'I' 문자 쓰기</td><td><code>char_buf[0]=='H'</code>, <code>[1]=='I'</code></td></tr>
+  <tr><td>3</td><td>캔버스 픽셀 쓰기</td><td><code>canvas_buf[0]==1</code></td></tr>
+  <tr><td>4</td><td>CTRL에 enable+clear 동시 쓰기</td><td>clear_busy 1→0 전이, 버퍼 전체 0x20</td></tr>
+  <tr><td>5</td><td>canvas_mode 쓰고 읽기</td><td>readback <code>rd[0]==1</code></td></tr>
+  <tr><td>6</td><td>라인 롤오버</td><td>h=799→0, v=0→1</td></tr>
+  <tr><td>7</td><td>Hsync 폭 계수</td><td>96 픽셀 Low 확인</td></tr>
+</table>
+</section>
+
+<!-- ==================== 7. 예상 파형 ==================== -->
+<section id="waveforms">
+<h2>7. 예상 파형 설명</h2>
+
+<h3>파형 1 — 문자 버퍼 쓰기 (write_char)</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">clk</span><span class="wv-hi">__‾‾__‾‾__‾‾__‾‾__‾‾__‾‾</span></div>
+<div class="wv-line"><span class="wv-label">char_wr_addr</span><span class="wv-data">────[  0x000  ]──────────────</span></div>
+<div class="wv-line"><span class="wv-label">char_wr_data</span><span class="wv-data">────[ 0x41='A']──────────────</span></div>
+<div class="wv-line"><span class="wv-label">char_wr_en</span><span class="wv-hi">─────────‾‾______────────────</span></div>
+<div class="wv-line"><span class="wv-label">char_buf[0]</span><span class="wv-data">──────────────[0x41]─────────</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">char_wr_en이 High인 클럭의 상승 엣지에서 char_buf에 값이 기록됩니다. 다음 클럭부터 char_buf[0]이 0x41('A')로 유지됩니다.</p>
+
+<h3>파형 2 — clear 동작</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">clk</span><span class="wv-hi">__‾‾__‾‾__‾‾...(1200클럭)...‾‾</span></div>
+<div class="wv-line"><span class="wv-label">clear</span><span class="wv-hi">──‾‾__──────────────────────</span></div>
+<div class="wv-line"><span class="wv-label">clear_busy</span><span class="wv-hi">────‾‾‾‾‾‾...(1200클럭)...____</span></div>
+<div class="wv-line"><span class="wv-label">clear_idx</span><span class="wv-data">────[0][1][2]...[1199]────────</span></div>
+<div class="wv-line"><span class="wv-label">char_buf[n]</span><span class="wv-data">──────────────────[0x20 ...]──</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">clear 펄스 직후 clear_busy=1이 되고, clear_idx가 0→1199로 증가하면서 매 클럭 char_buf에 0x20(공백)을 씁니다. 1200클럭 후 clear_busy=0으로 복귀합니다.</p>
+
+<h3>파형 3 — 수평 카운터 롤오버</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">pix_phase</span><span class="wv-data">[0][1][2][3][0][1][2][3]...</span></div>
+<div class="wv-line"><span class="wv-label">h_cnt(phase3)</span><span class="wv-data">[ 797 ][ 798 ][ 799 ][  0  ][ 1  ]...</span></div>
+<div class="wv-line"><span class="wv-label">v_cnt(phase3)</span><span class="wv-data">[ 0   ][ 0   ][ 0   ][  1  ][ 1  ]...</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">h_cnt는 Phase 3에서만 증가합니다. 799 다음에 0으로 리셋되고, 동시에 v_cnt가 1 증가합니다.</p>
+
+<h3>파형 4 — Hsync / Vsync 생성</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">h_cnt</span><span class="wv-data">[639][640..655][656..751][752..799][0]...</span></div>
+<div class="wv-line"><span class="wv-label">Hsync</span><span class="wv-hi">──────────────‾_________‾‾‾‾‾‾──────</span></div>
+<div class="wv-line" style="margin-top:.5rem"><span class="wv-label">v_cnt</span><span class="wv-data">[479][480..489][490..491][492..524][0]...</span></div>
+<div class="wv-line"><span class="wv-label">Vsync</span><span class="wv-hi">──────────────‾_________‾‾‾‾‾‾──────</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">Hsync는 h_cnt가 656~751 구간에서 Low(96 픽셀). Vsync는 v_cnt가 490~491 구간에서 Low(2 라인). 모두 active-low 입니다.</p>
+
+<h3>파형 5 — 폰트 렌더링 파이프라인</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">pix_phase</span><span class="wv-data">[  0  ][  1  ][  2  ][  3  ]</span></div>
+<div class="wv-line"><span class="wv-label">char_rd_addr</span><span class="wv-data">[ row*40+col 계산 ]──────────</span></div>
+<div class="wv-line"><span class="wv-label">char_code_q</span><span class="wv-data">──[RAM→0x41'A']──────────────</span></div>
+<div class="wv-line"><span class="wv-label">font_addr</span><span class="wv-data">───────[{0x41, row}]──────────</span></div>
+<div class="wv-line"><span class="wv-label">font_data</span><span class="wv-data">──────────────[ROM→0xFF00...]─</span></div>
+<div class="wv-line"><span class="wv-label">text_pixel_on</span><span class="wv-data">─────────────────[ 1 or 0  ]─</span></div>
+<div class="wv-line"><span class="wv-label">vgaRGB</span><span class="wv-data">──────────────────[fg or bg]─</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">Phase 0에서 char_buf를 읽어 char_code_q에 저장, Phase 1에서 font_rom에 주소 전달, Phase 2에서 font_rom 출력 안정화(1클럭 레이턴시), Phase 3에서 최종 색상 결정 및 VGA 출력.</p>
+
+<h3>파형 6 — AXI 쓰기 핸드셰이크 (tb_vga_axi)</h3>
+<div class="waveform">
+<div class="wv-line"><span class="wv-label">S_AXI_ACLK</span><span class="wv-hi">__‾‾__‾‾__‾‾__‾‾__‾‾__‾‾</span></div>
+<div class="wv-line"><span class="wv-label">AWVALID</span><span class="wv-hi">────‾‾‾‾‾‾______────────</span></div>
+<div class="wv-line"><span class="wv-label">AWREADY</span><span class="wv-hi">──────────‾‾______────────</span></div>
+<div class="wv-line"><span class="wv-label">WVALID</span><span class="wv-hi">────‾‾‾‾‾‾______────────</span></div>
+<div class="wv-line"><span class="wv-label">WREADY</span><span class="wv-hi">──────────‾‾______────────</span></div>
+<div class="wv-line"><span class="wv-label">BVALID</span><span class="wv-hi">──────────────‾‾____────</span></div>
+<div class="wv-line"><span class="wv-label">BREADY</span><span class="wv-hi">‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾‾</span></div>
+<div class="wv-line"><span class="wv-label">BRESP</span><span class="wv-data">──────────────[00:OKAY]────</span></div>
+</div>
+<p style="margin-top:.5rem; color:var(--muted); font-size:.85rem">마스터가 AWVALID+WVALID를 동시에 Assert → 슬레이브(vga_axi)가 AWREADY+WREADY로 수락 → BVALID로 응답(OKAY) → BREADY로 응답 수신 완료.</p>
+
+<div class="note" style="margin-top:1.5rem">
+<strong>시뮬레이션 팁:</strong> tb_vga.v는 <code>$dumpvars</code>로 VCD 파일을 생성합니다. GTKWave 등에서 <code>h_cnt</code>, <code>v_cnt</code>, <code>Hsync</code>, <code>Vsync</code>, <code>vgaRed</code>를 동시에 확인하면 VGA 타이밍을 시각적으로 검증할 수 있습니다.
+</div>
+</section>
+
+</main>
+<footer>Project 7 HandCipher — VGA 컨트롤러 문서 | 2026-06-30</footer>
+</body>
+</html>

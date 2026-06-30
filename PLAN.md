@@ -11,6 +11,22 @@ EMNIST NPU, VGA, TFT-LCD를 각각 AXI Custom IP로 패키징해 Vivado Block De
 - **RTL (Custom IP)**: NPU 추론, VGA 신호 생성, ILI9341/XPT2046 SPI 제어
 - **C 소프트웨어 (Vitis)**: 카이사르 암호화/복호화, 화면 구성, 버튼/스위치 처리, 모드 제어
 
+## 현재 진행 상태 (2026-06-30 기준)
+
+현재 저장소 기준으로 **Phase 1 학습 파이프라인**과 **Phase 2 IP_TEST RTL 구현/시뮬레이션 검증**은 완료 상태다.
+
+- 완료:
+  - EMNIST 학습/양자화/export 및 정수 정확도 검증
+  - `npu_ctrl.v`, `npu_axi.v`, weight/bias ROM, `tb_npu.v`, `tb_npu_axi.v`
+  - `canvas_display.v`, `draw_canvas.v`, `tft_axi.v`, `tb_tft.v`
+  - `font_rom.v`, `vga_ctrl.v`, `vga_axi.v`, `tb_font_rom.v`, `tb_vga.v`, `tb_vga_axi.v`
+  - `Vivado/IP_TEST/IP_TEST.xpr`에 주요 RTL/시뮬레이션 파일 등록
+- 미완료/확인 필요:
+  - `npu_ip_v1_0`, `tft_ip_v1_0`, `vga_ip_v1_0` 패키징 산출물은 현재 저장소에 없음
+  - `Vivado/TOP/`는 디렉터리만 있고 Block Design / `.xsa` 산출물 없음
+  - `Vitis/`는 `.gitignore`만 있고 `main.c`, `caesar.c`, `display.c` 등 앱 소스 없음
+  - TFT 터치 좌표/OK/CLEAR sticky flag의 XPT2046 bitstream 기반 시뮬레이션 보강은 남아 있음
+
 **시스템 흐름:**
 
 ```
@@ -117,52 +133,38 @@ Project_7_HandCipher/
 │   │   │   ├── imports/
 │   │   │   │   └── tft_lcd_sv.sv          (spi, xpt2046 재사용)
 │   │   │   └── new/
-│   │   │       ├── mem/                   (quantize_export.py 생성)
-│   │   │       │   ├── weights_l1.mem
-│   │   │       │   ├── weights_l2.mem
-│   │   │       │   ├── biases_l1.mem
-│   │   │       │   └── biases_l2.mem
-│   │   │       ├── npu_params.vh
-│   │   │       ├── npu_ctrl.v             (EMNIST 추론 FSM)
-│   │   │       ├── image_buffer.v         (캔버스 BRAM, 듀얼포트)
-│   │   │       ├── weight_rom_l1.v
-│   │   │       ├── weight_rom_l2.v
-│   │   │       ├── bias_rom.v
-│   │   │       ├── npu_axi.v              (NPU AXI4-Lite 래퍼)
-│   │   │       ├── tb_npu.v
+│   │   │       ├── npu_ctrl.v             (✅ EMNIST 추론 FSM)
+│   │   │       ├── weight_rom_l1.v        (✅ training/exported/*.mem 사용)
+│   │   │       ├── weight_rom_l2.v        (✅ training/exported/*.mem 사용)
+│   │   │       ├── bias_rom_l1.v          (✅ training/exported/*.mem 사용)
+│   │   │       ├── bias_rom_l2.v          (✅ training/exported/*.mem 사용)
+│   │   │       ├── npu_axi.v              (✅ NPU AXI4-Lite 래퍼)
 │   │   │       ├── canvas_display.v       (✅ ILI9341 SPI 스트리밍)
 │   │   │       ├── draw_canvas.v          (✅ 터치 좌표 → BRAM Port A)
 │   │   │       ├── tft_axi.v              (✅ TFT AXI4-Lite 래퍼)
-│   │   │       ├── tb_tft.v               (✅ XSim PASS)
 │   │   │       ├── font_rom.v             (✅ 16×16 폰트 ROM)
 │   │   │       ├── vga_ctrl.v             (✅ 640×480 타이밍 + 문자 렌더러)
-│   │   │       ├── vga_axi.v              (✅ VGA AXI4-Lite 래퍼)
-│   │   │       └── tb_vga.v
+│   │   │       └── vga_axi.v              (✅ VGA AXI4-Lite 래퍼)
+│   │   ├── IP_TEST.srcs/sim_1/new/
+│   │   │   ├── tb_font_rom.v              (✅ XSim PASS)
+│   │   │   ├── tb_npu.v                   (✅ XSim PASS)
+│   │   │   ├── tb_npu_axi.v               (✅ XSim PASS)
+│   │   │   ├── tb_tft.v                   (✅ XSim PASS)
+│   │   │   ├── tb_vga.v                   (✅ XSim PASS)
+│   │   │   └── tb_vga_axi.v               (✅ XSim PASS)
 │   │   └── IP_TEST.srcs/constrs_1/
-│   │       └── imports/basys3.xdc
+│   │       └── imports/Basys-3-Master.xdc
 │   │
-│   └── TOP/                               ← Vivado 프로젝트 #2 (통합 + .xsa 생성)
-│       ├── TOP.xpr
-│       ├── TOP.srcs/sources_1/new/bd/     (Block Design)
-│       │   MicroBlaze + AXI Interconnect
-│       │   + npu_ip / tft_ip / vga_ip (Custom IP)
-│       │   + AXI GPIO (버튼 + 스위치)
-│       ├── TOP.srcs/constrs_1/new/
-│       │   └── basys3.xdc
-│       └── handcipher.xsa                 (Vitis로 내보내기)
+│   └── TOP/                               ← Vivado 프로젝트 #2 (통합 + .xsa 생성 예정)
+│       └── (현재 저장소 기준 Block Design / .xsa 미생성)
 │
-├── Vitis/
-│   └── src/
-│       ├── main.c
-│       ├── caesar.c
-│       ├── caesar.h
-│       ├── display.c
-│       └── display.h
+├── Vitis/                                ← 현재 .gitignore만 존재, C 앱 소스 미작성
 └── training/
     ├── training_emnist.py                 (✅ 완료 → model.pth 생성됨)
-    ├── quantize_export.py                 (✅ 완료 → .mem 4개 + npu_params.vh)
+    ├── quantize_export.py                 (✅ 완료 → exported/*.mem 4개 + npu_params.vh)
     ├── test_inference.py                  (✅ 완료 → 정수 정확도 87.74%)
-    └── gen_font_mem.py                    (✅ 16×16 font_rom.mem 생성)
+    ├── gen_font_mem.py                    (✅ 16×16 font_rom.mem 생성)
+    └── exported/                          (✅ weights/biases/font/npu_params 산출물)
 ```
 
 ---
@@ -587,18 +589,18 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 
 **NPU IP:**
 
-4. `npu_ctrl.v`, `weight_rom_l1.v`, `weight_rom_l2.v`, `bias_rom.v`, `image_buffer.v`
-5. `npu_axi.v` (AXI4-Lite 래퍼)
-6. `tb_npu.v` → XSim: AXI start → done, RESULT 0~25 확인
+4. ~~`npu_ctrl.v`, `weight_rom_l1.v`, `weight_rom_l2.v`, `bias_rom_l1.v`, `bias_rom_l2.v`~~ ✅
+5. ~~`npu_axi.v` (AXI4-Lite 래퍼, 외부 Canvas BRAM Port B)~~ ✅
+6. ~~`tb_npu.v` → XSim: start → done, RESULT 0~25 확인~~ ✅
 6-1. ~~`tb_npu_axi.v` → 실제 AXI write/read polling 검증, STATUS done sticky 확인~~ ✅
-7. **Create and Package New IP** → `npu_ip_v1_0`
+7. **Create and Package New IP** → `npu_ip_v1_0` ⚠️ 패키징 산출물 저장소 누락/확인 필요
 
 **TFT-LCD IP:**
 
 8. ~~`canvas_display.v`, `draw_canvas.v` (tft_lcd_sv.sv의 spi/xpt2046 재사용)~~ ✅
 9. ~~`tft_axi.v` (AXI4-Lite 래퍼)~~ ✅
 10. ~~`tb_tft.v` → XSim: AXI clear/readback + BRAM Port A write 확인~~ ✅
-11. **Create and Package New IP** → `tft_ip_v1_0`
+11. **Create and Package New IP** → `tft_ip_v1_0` ⏳ 미완료
 
 **VGA IP:**
 
@@ -609,12 +611,12 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 16. ~~`tb_vga.v` 갱신 → 16×16 문자 출력 + Hsync/Vsync 검증~~ ✅
 17. ~~`vga_axi.v` 작성 → AXI4-Lite VGA 래퍼, CHAR_ADDR 0~1199 기준~~ ✅
 17-1. ~~`tb_vga_axi.v` → AXI 문자쓰기/clear/canvas_mode/Hsync 검증~~ ✅
-18. **Create and Package New IP** → `vga_ip_v1_0`
+18. **Create and Package New IP** → `vga_ip_v1_0` ⏳ 미완료
 
-### Phase 3 — TOP 통합 (Vivado/TOP/)
+### Phase 3 — TOP 통합 (Vivado/TOP/) ⏳ 미시작
 
-16. TOP 프로젝트 생성, IP Repository에 npu_ip / tft_ip / vga_ip 추가
-17. Block Design 생성:
+19. TOP 프로젝트 생성, IP Repository에 npu_ip / tft_ip / vga_ip 추가
+20. Block Design 생성:
     - MicroBlaze (32KB BRAM)
     - AXI Interconnect
     - npu_ip, tft_ip, vga_ip 각각 Add IP
@@ -625,23 +627,23 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
       - Port A: `tft_ip`의 `canvas_addra/dina/wea/ena`에 배선
       - Port B: `npu_ip`의 `canvas_addrb/enb/doutb`에 배선
       - 두 포트 클럭 모두 시스템 100MHz 클럭 연결
-18. `basys3.xdc` 핀 제약 추가
-19. 합성 + 구현 → BRAM18 ≤50, WNS ≥ 0 확인
-20. **File → Export → Export Hardware** → `handcipher.xsa` 생성
+21. `basys3.xdc` 핀 제약 추가
+22. 합성 + 구현 → BRAM18 ≤50, WNS ≥ 0 확인
+23. **File → Export → Export Hardware** → `handcipher.xsa` 생성
 
-### Phase 4 — Vitis C 코드 (Vitis/)
+### Phase 4 — Vitis C 코드 (Vitis/) ⏳ 미시작
 
-21. Vitis에서 handcipher.xsa로 Platform 프로젝트 생성
-22. Application 프로젝트 생성 → `caesar.c` / `caesar.h`
-23. `display.c` / `display.h`
-24. `main.c`
-25. 빌드 + Basys3에 Program Device
+24. Vitis에서 handcipher.xsa로 Platform 프로젝트 생성
+25. Application 프로젝트 생성 → `caesar.c` / `caesar.h`
+26. `display.c` / `display.h`
+27. `main.c`
+28. 빌드 + Basys3에 Program Device
 
-### Phase 5 — 하드웨어 검증
+### Phase 5 — 하드웨어 검증 ⏳ 미시작
 
-26. 글자 그리기 → btnC → VGA 암호화 결과 확인
-27. SW[14]=1 복호화 모드 전환 확인
-28. SW[4:0] 시프트 값 변경 실시간 반영 확인
+29. 글자 그리기 → btnC → VGA 암호화 결과 확인
+30. SW[14]=1 복호화 모드 전환 확인
+31. SW[4:0] 시프트 값 변경 실시간 반영 확인
 
 ---
 
@@ -730,6 +732,12 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 | 14:20 | `f386d2b` | **PLAN.md 최종 정리** — NPU 파트 상세 사양 및 검증 결과 반영 |
 | 16:09 | `working tree` | **TFT IP 1차 구현** — `canvas_display.v`, `draw_canvas.v`, `tft_axi.v`, `tb_tft.v` 작성, `tft_lcd_sv.sv` 재사용 활성화, XSim `PASS: tb_tft completed` 확인 |
 | 17:07 | `working tree` | **AXI 테스트벤치 추가** — `tb_npu_axi.v`, `tb_vga_axi.v` 작성, `npu_axi` STATUS done sticky 및 WSTRB 폭 수정, XSim PASS 확인 |
+
+### 2026-06-30 (화)
+
+| 시각 | 커밋 | 내용 |
+|------|------|------|
+| working tree | `working tree` | **현재 상태 재점검** — Phase 2 IP_TEST RTL/AXI 테스트 완료 상태 확인, IP 패키징/TOP/Vitis 미구현 상태 PLAN.md에 반영 |
 
 ---
 
@@ -976,63 +984,3 @@ xpt2046 #(
   - STATUS[2] = btn_ok sticky
   - STATUS[3] = btn_clear sticky
   - status read 또는 별도 clear 정책으로 sticky flag 정리
-
-
-
-
-
-
-HandCipher — FPGA Handwritten Letter Recognition & Caesar Cipher System (v6) [곽영재 - NPU 파트]ContextHandCipher — SoC-Based handwritten letter recognition and Caesar cipher system using a custom EMNIST NPU, touchscreen input and VGA output on Basys3.역할 분리:곽영재 (NPU 담당): EMNIST NPU 가속기 및 AXI Custom IP 설계, 고정소수점 양자화 알고리즘 소프트웨어 선행 검증 및 하드웨어 이식.Block Design 구성 (NPU 관점)┌─────────────────────────────────────────────────────┐
-│                  AXI Interconnect                   │
-│                                                     │
-│  MicroBlaze ──┬──► NPU IP      (0x43C0_0000)        │
-│  (32KB BRAM)  │                                     │
-└───────────────┼─────────────────────────────────────┘
-                │
-┌───────────────┴──────────────────────────────────────────────────┐
-│  캔버스 BRAM (Block Design 레벨, BRAM Generator IP)               │
-│                                                                  │
-│  TFT-LCD IP ──► bram_porta (write: 터치 픽셀 1-bit, addr 0~783) │
-│  NPU IP     ◄── bram_portb (read:  추론 시 픽셀 순차 읽기)       │
-│                                                                  │
-│  → MicroBlaze는 NPU_CTRL=1만 쓰면 됨 (784바이트 전송 불필요)    │
-│  → BRAM은 두 IP 사이의 공유 하드웨어로 Block Design에서 배선    │
-└──────────────────────────────────────────────────────────────────┘
-BRAM 리소스 (NPU 할당량)내용BRAM18NPU L1 weight ROM (784×64)25NPU L2 weight ROM (64×26)1캔버스 BRAM (28×28, 공유)1NPU 관련 합계27 / 100전체 파일 구조 (NPU 관련 파일)Project_7_HandCipher/
-├── Vivado/
-│   ├── IP_TEST/                           ← Vivado 프로젝트 #1 (RTL 검증)
-│   │   ├── IP_TEST.srcs/sources_1/new/
-│   │   │   ├── mem/                   (quantize_export.py 생성)
-│   │   │   │   ├── weights_l1.mem
-│   │   │   │   ├── weights_l2.mem
-│   │   │   │   ├── biases_l1.mem
-│   │   │   │   └── biases_l2.mem
-│   │   │   ├── npu_params.vh
-│   │   │   ├── npu_ctrl.v             (✅ 완료, EMNIST 추론 3단 FSM 코어 제어기)
-│   │   │   ├── weight_rom_l1.v        (✅ 완료, timescale 구문 제거 완료)
-│   │   │   ├── weight_rom_l2.v        (✅ 완료, timescale 구문 제거 완료)
-│   │   │   ├── bias_rom.v             (✅ 완료, timescale 구문 제거 완료)
-│   │   │   ├── npu_axi.v              (✅ 완료, NPU AXI4-Lite 슬레이브 래퍼)
-│   │   │   └── tb_npu.v               (✅ 완료, 157μs 연산 타이밍 하드웨어 시뮬레이션 검증)
-│   │
-│   └── TOP/                               ← Vivado 프로젝트 #2 (통합)
-│       └── [ip_repo/]                 (✅ 완료, HandCipher_EMNIST_NPU 부품 저장소)
-└── training/
-    ├── training_emnist.py                 (✅ 완료 → model.pth 생성됨)
-    ├── quantize_export.py                 (✅ 완료 → .mem 4개 + npu_params.vh)
-    └── test_inference.py                  (✅ 완료 → 정수 정확도 87.74%)
-Part 1: 학습 & 양자화 파이프라인 ✅ 완료 (정수 정확도 87.74%)데이터셋 및 신경망 구조EMNIST Letters: A~Z, 26클래스 사양 선정 및 전치 처리(.T) 적용.MLP 구조: $784(\text{Input}) \rightarrow 64(\text{Hidden}) \rightarrow 26(\text{Output})$ 레이어 매핑.양자화 계약L1: hidden[n] = clamp(relu(Σ(uint8(px)×int8(w1)) + bias_l1) >> SHIFT_L1, 0, 255)
-L2: score[o]  = Σ(uint8(hidden)×int8(w2)) + bias_l2   (o: 0~25)
-letter = argmax(score)  → 0=A, 25=Z
-Part 2: Custom IP 설계IP #1: npu_ip — NPU 추론 엔진 ✅ 패키징 완료AXI 레지스터 맵:0x00: CTRL    [0]=start (1 쓰면 추론 시작)
-0x04: STATUS  [0]=done, [1]=busy
-0x08: RESULT  [4:0]=letter (0~25, done=1일 때 유효)
-핵심 RTL 아키텍처 설계 사양:하드웨어 데이터 복원 로직: 외부 도화지 BRAM에서 넘어오는 1비트 정보를 가속기 내부 연산을 위해 0 $\rightarrow$ 0x00, 1 $\rightarrow$ 0xFF 형태의 8비트 uint8 픽셀 스케일 데이터로 하드웨어 자체 복원 디코딩 수행.연산 유닛 설계 아키텍처: 가중치 행렬 주소 연산 장치($\text{w1\_addr} = \text{hidden\_cnt} \times 784 + \text{pixel\_cnt}$) RTL 매핑 적용. 바이어스 덧셈, 고정소수점 스케일링용 >>> 10(우측 10비트 시프트), 언더플로우/오버플로우 가드용 Clamp(0, 255) ReLU 활성화 함수 회로 최적화 이식 완료.최댓값 추적 연산기: 26개 알파벳 스코어 중 최댓값을 실시간 비교 추적하여 가속 연산 종료와 동시에 RESULT 레지스터 갱신 로직 구현.npu_axi.v 외부 연동 포트 사양:Verilog// 캔버스 BRAM Port B (Block Design에서 BRAM Generator Port B에 직결)
-output [9:0]  canvas_addrb,
-output        canvas_enb,
-input         canvas_doutb,   // 1-bit
-
-// NPU 결과 출력 파이프라인
-output [4:0]  letter,
-output        done
-Part 4: 테스트벤치 검증tb_npu.v ✅ 검증 완료AXI write CTRL=1 $\rightarrow$ CALC_L1 모드 진입 및 가속 엔진 구동 타이밍 검증 완료.약 $157\mu\text{s}$의 전체 MAC 루프 동작 확인 후 STATUS done 검출 및 RESULT 유효 데이터 레지스터 출력 상태 도달 완료.구현 공정 내역 (NPU 파트)Phase 1 — 학습 (PC) ✅ 완료~~training_emnist.py → model.pth~~ ✅~~quantize_export.py → .mem 4개 + npu_params.vh~~ ✅ (SHIFT_L1=10)~~test_inference.py → 정수 시뮬레이션 정확도~~ ✅ 87.74% (목표 ≥80%)Phase 2 — IP RTL 구현 및 검증 (Vivado/IP_TEST/) ✅ 완료~~npu_ctrl.v, weight_rom_l1.v, weight_rom_l2.v, bias_rom.v, image_buffer.v~~ ✅~~npu_axi.v (AXI4-Lite 래퍼)~~ ✅~~tb_npu.v → XSim: AXI start → done, RESULT 0~25 확인~~ ✅~~Create and Package New IP → npu_ip_v1_0~~ ✅ (로컬 디렉토리 경로 지정 및 최상위 모듈 설정 완료)검증 기준 (NPU 파트)단계기준상태학습float ≥85%, 정수 시뮬레이션 ≥80%✅ 통과 (87.74%)NPU IPAXI start → done, RESULT 0~25✅ 통과 (XSim 완료)
