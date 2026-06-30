@@ -665,23 +665,20 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 17-1. ~~`tb_vga_axi.v` → AXI 문자쓰기/clear/canvas_mode/Hsync 검증~~ ✅
 18. ~~**Create and Package New IP** → `vga_ip_v1_0`~~ ✅ (`ip_repo/vga_ip/component.xml` 확인)
 
-### Phase 3 — TOP 통합 (Vivado/TOP/) ✅ 기본 연결성 완료
+### Phase 3 — TOP 통합 (Vivado/TOP/) ✅ 완료
 
-19. TOP 프로젝트 생성, IP Repository에 npu_ip / tft_ip / vga_ip 추가
-20. Block Design 생성:
+19. ~~TOP 프로젝트 생성, IP Repository에 npu_ip / tft_ip / vga_ip 추가~~ ✅
+20. ~~Block Design 생성:~~ ✅
     - MicroBlaze V local memory (128KB LMB)
-    - AXI Interconnect
+    - AXI SmartConnect
     - npu_ip, tft_ip, vga_ip 각각 Add IP
     - AXI GPIO (버튼 + 스위치)
-    - **BRAM Generator** Add IP:
-      - Memory Type: True Dual Port RAM
-      - Width: 1bit, Depth: 1024 (≥784)
+    - **BRAM Generator** (True Dual Port RAM, 1bit×1024)
       - Port A: `tft_ip`의 `canvas_addra/dina/wea/ena`에 배선
       - Port B: `npu_ip`의 `canvas_addrb/enb/doutb`에 배선
-      - 두 포트 클럭 모두 시스템 100MHz 클럭 연결
-21. `basys3.xdc` 핀 제약 추가
-22. 합성 + 구현 → BRAM18 ≤50, WNS ≥ 0 확인
-23. **File → Export → Export Hardware** → `handcipher.xsa` 생성
+21. ~~`basys3.xdc` 핀 제약 추가~~ ✅ (`Basys-3-Master.xdc`)
+22. ~~합성 + 구현~~ ✅ **BRAM36: 33/50 (66%), WNS = +0.387ns** (예상 94 BRAM18보다 훨씬 적음)
+23. ~~**File → Export → Export Hardware** → `handcipher.xsa` 생성~~ ✅ (`HandCipher_wrapper.xsa`)
 
 ### Phase 4 — Vitis C 코드 (Vitis/) ⏳ 진행 중
 
