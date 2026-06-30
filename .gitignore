@@ -22,6 +22,9 @@ xvlog.pb
 # 합성/구현 리포트
 *.rpt
 
+# clangd 인덱스 캐시 (IDE 자동 생성)
+.cache/
+
 # Claude Code 내부 파일
 .claude/
 CLAUDE.md

@@ -668,14 +668,14 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 ### Phase 3 — TOP 통합 (Vivado/TOP/) ✅ 완료
 
 19. ~~TOP 프로젝트 생성, IP Repository에 npu_ip / tft_ip / vga_ip 추가~~ ✅
-20. ~~Block Design 생성:~~ ✅
-    - MicroBlaze V local memory (128KB LMB)
-    - AXI SmartConnect
-    - npu_ip, tft_ip, vga_ip 각각 Add IP
-    - AXI GPIO (버튼 + 스위치)
-    - **BRAM Generator** (True Dual Port RAM, 1bit×1024)
-      - Port A: `tft_ip`의 `canvas_addra/dina/wea/ena`에 배선
-      - Port B: `npu_ip`의 `canvas_addrb/enb/doutb`에 배선
+20. ~~Block Design 생성~~ ✅
+    - ~~MicroBlaze V local memory (128KB LMB)~~ ✅
+    - ~~AXI SmartConnect~~ ✅
+    - ~~npu_ip, tft_ip, vga_ip 각각 Add IP~~ ✅
+    - ~~AXI GPIO (버튼 + 스위치)~~ ✅
+    - ~~**BRAM Generator** (True Dual Port RAM, 1bit×1024)~~ ✅
+      - ~~Port A: `tft_ip`의 `canvas_addra/dina/wea/ena`에 배선~~ ✅
+      - ~~Port B: `npu_ip`의 `canvas_addrb/enb/doutb`에 배선~~ ✅
 21. ~~`basys3.xdc` 핀 제약 추가~~ ✅ (`Basys-3-Master.xdc`)
 22. ~~합성 + 구현~~ ✅ **BRAM36: 33/50 (66%), WNS = +0.387ns** (예상 94 BRAM18보다 훨씬 적음)
 23. ~~**File → Export → Export Hardware** → `handcipher.xsa` 생성~~ ✅ (`HandCipher_wrapper.xsa`)
