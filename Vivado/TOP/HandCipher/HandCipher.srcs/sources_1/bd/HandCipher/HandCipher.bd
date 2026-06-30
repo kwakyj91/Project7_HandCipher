@@ -275,7 +275,7 @@
             },
             "hdl_attributes": {
               "BMM_INFO_ADDRESS_SPACE": {
-                "value": "byte  0x00000000 32 > HandCipher microblaze_riscv_0_local_memory/lmb_bram",
+                "value": "byte  0x00002000 32 > HandCipher microblaze_riscv_0_local_memory/lmb_bram",
                 "value_src": "default"
               },
               "KEEP_HIERARCHY": {
@@ -774,17 +774,17 @@
             "segments": {
               "SEG_HandCipher_EMNIST_NPU_0_reg0": {
                 "address_block": "/HandCipher_EMNIST_NPU_0/S_AXI/reg0",
-                "offset": "0x00020000",
+                "offset": "0x00000000",
                 "range": "4K"
               },
               "SEG_HandCipher_TFT_LCD_0_reg0": {
                 "address_block": "/HandCipher_TFT_LCD_0/S_AXI/reg0",
-                "offset": "0x00030000",
+                "offset": "0x00010000",
                 "range": "4K"
               },
               "SEG_HandCipher_VGA_0_reg0": {
                 "address_block": "/HandCipher_VGA_0/S_AXI/reg0",
-                "offset": "0x00021000",
+                "offset": "0x00001000",
                 "range": "4K"
               },
               "SEG_axi_uartlite_0_Reg": {
@@ -794,8 +794,8 @@
               },
               "SEG_dlmb_bram_if_cntlr_Mem": {
                 "address_block": "/microblaze_riscv_0_local_memory/dlmb_bram_if_cntlr/SLMB/Mem",
-                "offset": "0x00000000",
-                "range": "128K",
+                "offset": "0x00002000",
+                "range": "8K",
                 "offset_high_param": "C_HIGHADDR"
               }
             }
@@ -804,8 +804,8 @@
             "segments": {
               "SEG_ilmb_bram_if_cntlr_Mem": {
                 "address_block": "/microblaze_riscv_0_local_memory/ilmb_bram_if_cntlr/SLMB/Mem",
-                "offset": "0x00000000",
-                "range": "128K",
+                "offset": "0x00002000",
+                "range": "8K",
                 "offset_high_param": "C_HIGHADDR"
               }
             }
