@@ -3,7 +3,7 @@
 #include "xil_printf.h"
 #include "caesar.h"
 #include "display.h"
-#include "xuartlite_l.h"
+#include "xgpio.h"
 
 // 하드웨어 베이스 주소 매핑
 #define NPU_BASE            XPAR_HANDCIPHER_EMNIST_NPU_0_BASEADDR
@@ -134,9 +134,19 @@ int main() {
     int shift = 3;
     int mode  = 1; // 0: ENCRYPT, 1: DECRYPT
 
-    // 이전 터치 상태를 저장할 변수 (Edge Detection용)
+    // 이전 터치 및 버튼 상태를 저장할 변수 (Edge Detection용)
     int prev_ok = 0;
     int prev_clear = 0;
+    u32 prev_btn = 0;
+    int prev_sw0 = 0;
+
+    // AXI GPIO 초기화
+    XGpio gpio;
+    if (XGpio_Initialize(&gpio, XPAR_AXI_GPIO_0_BASEADDR) != XST_SUCCESS) {
+        xil_printf("GPIO Initialization Failed!\r\n");
+    }
+    XGpio_SetDataDirection(&gpio, 1, 0xFFFFFFFF); // Channel 1: input (buttons)
+    XGpio_SetDataDirection(&gpio, 2, 0xFFFFFFFF); // Channel 2: input (switches)
 
     // IP 초기 가동 활성화 및 TFT 캔버스 초기화
     Xil_Out32(VGA_BASE + 0x00U, 0x01U); // VGA Enable
@@ -151,60 +161,83 @@ int main() {
     xil_printf("HandCipher Decoder System Boot Up Successfully (TFT Touch Mode).\r\n");
 
     while (1) {
-        // UART 비차단식(non-blocking) 명령 처리
-        if (!XUartLite_IsReceiveEmpty(XPAR_XUARTLITE_0_BASEADDR)) {
-            u8 cmd = XUartLite_RecvByte(XPAR_XUARTLITE_0_BASEADDR);
-            int config_changed = 0;
-            
-            if (cmd == '+' || cmd == '=') {
-                shift = (shift + 1) % 26;
-                xil_printf("Shift increased to: +%d\r\n", shift);
-                config_changed = 1;
-            } else if (cmd == '-' || cmd == '_') {
-                shift = (shift + 25) % 26;
-                xil_printf("Shift decreased to: +%d\r\n", shift);
-                config_changed = 1;
-            } else if (cmd == 'm' || cmd == 'M') {
-                mode = !mode;
-                xil_printf("Mode changed to: %s\r\n", mode ? "DECRYPT" : "ENCRYPT");
-                config_changed = 1;
-            } else if (cmd == 'r' || cmd == 'R') {
-                buf_len = 0;
-                plain_buf[0] = '\0';
-                cipher_buf[0] = '\0';
-                clear_tft_canvas();
-                clear_vga_canvas();
-                xil_printf("Buffers and Canvas cleared.\r\n");
-                config_changed = 1;
-            } else if (cmd == 'h' || cmd == 'H' || cmd == '?') {
-                xil_printf("\r\n--- HandCipher Controller Menu ---\r\n");
-                xil_printf("  [+] or [=] : Increase Caesar Shift\r\n");
-                xil_printf("  [-] or [_] : Decrease Caesar Shift\r\n");
-                xil_printf("  [m] or [M] : Toggle Mode (ENCRYPT <-> DECRYPT)\r\n");
-                xil_printf("  [r] or [R] : Clear Plaintext/Ciphertext Buffers\r\n");
-                xil_printf("  [h] or [?] : Show Help Menu\r\n");
-                xil_printf("Current Config: Mode=%s, Shift=+%d, BufLen=%d\r\n\r\n", 
-                           mode ? "DECRYPT" : "ENCRYPT", shift, buf_len);
-            }
-            
-            if (config_changed) {
-                display_drawing(VGA_BASE, inferred_char, plain_buf, cipher_buf, buf_len, shift, mode);
-            }
-        }
-
         // TFT의 가상 터치 버튼 상태 및 실시간 터치 입력 여부 읽기
         u32 tft_st    = Xil_In32(TFT_STATUS);
         int touch_valid = (int)(tft_st & 0x01U);       // 실시간 그리기 터치 중 여부 (bit 0)
         int touch_ok    = (int)((tft_st >> 2) & 0x1U); // 녹색 OK 버튼 터치 여부
         int touch_clear = (int)((tft_st >> 3) & 0x1U); // 빨간 CLR 버튼 터치 여부
 
-        // 연속 터치(Double-Triggering) 방지를 위한 Edge 감지 (0 -> 1이 되는 순간만 감지)
+        // GPIO 버튼 및 스위치 입력 읽기
+        u32 btn_val = XGpio_DiscreteRead(&gpio, 1);
+        u32 sw_val  = XGpio_DiscreteRead(&gpio, 2);
+
+        // 버튼 Edge 감지 (0 -> 1이 되는 순간만 감지)
+        u32 btn_pressed = btn_val & (~prev_btn);
+        prev_btn = btn_val;
+
+        int btnU_pressed = (btn_pressed & 0x01) ? 1 : 0; // Bit 0: btnU (T18)
+        int btnL_pressed = (btn_pressed & 0x02) ? 1 : 0; // Bit 1: btnL (W19)
+        int btnR_pressed = (btn_pressed & 0x04) ? 1 : 0; // Bit 2: btnR (T17)
+        int btnD_pressed = (btn_pressed & 0x08) ? 1 : 0; // Bit 3: btnD (U17)
+
+        // 스위치 Edge 감지 (SW0 리셋용)
+        int sw0_val = (sw_val & 0x0001) ? 1 : 0;         // Bit 0: sw0 (V17)
+        int sw0_triggered = sw0_val && !prev_sw0;
+        prev_sw0 = sw0_val;
+
+        int new_mode = (sw_val & 0x8000) ? 1 : 0;        // Bit 15: sw15 (R2)
+
+        // 연속 터치(Double-Triggering) 방지를 위한 터치 Edge 감지
         int ok_pressed    = touch_ok && !prev_ok;
         int clear_pressed = touch_clear && !prev_clear;
 
-        // 다음 루프를 위해 이전 상태 업데이트
+        // 다음 루프를 위해 이전 터치 상태 업데이트
         prev_ok    = touch_ok;
         prev_clear = touch_clear;
+
+        int config_changed = 0;
+
+        // 스위치 및 물리 버튼 상태 변경 처리
+        if (new_mode != mode) {
+            mode = new_mode;
+            xil_printf("Mode changed via Switch: %s\r\n", mode ? "DECRYPT" : "ENCRYPT");
+            config_changed = 1;
+        }
+
+        if (sw0_triggered) {
+            buf_len = 0;
+            plain_buf[0] = '\0';
+            cipher_buf[0] = '\0';
+            shift = 3;                      // 시프트 값 초기값(3)으로 리셋
+            clear_tft_canvas();
+            clear_vga_canvas();
+            inferred_char = '?';
+            xil_printf("System Reset via Switch SW0 (Shift reset to 3).\r\n");
+            config_changed = 1;
+        }
+
+        if (btnU_pressed) {
+            shift = (shift + 1) % 26;
+            xil_printf("Shift increased via Button U (T18): +%d\r\n", shift);
+            config_changed = 1;
+        }
+
+        if (btnD_pressed) {
+            shift = (shift + 25) % 26;
+            xil_printf("Shift decreased via Button D (U17): +%d\r\n", shift);
+            config_changed = 1;
+        }
+
+        if (btnL_pressed) {
+            buf_len = 0;
+            plain_buf[0] = '\0';
+            cipher_buf[0] = '\0';
+            clear_tft_canvas();
+            clear_vga_canvas();
+            inferred_char = '?';
+            xil_printf("Buffers cleared via Button L (W19).\r\n");
+            config_changed = 1;
+        }
 
         // === 실시간 드로잉 및 추론, 확정(Commit)/지우기(Clear) 처리 ===
         
@@ -225,8 +258,9 @@ int main() {
             vga_putchar(VGA_BASE, 6, 29, inferred_char, YELLOW, BLACK);
         }
 
-        // 사용자가 TFT의 [OK] 버튼 영역을 터치한 순간 -> 현재 검증 결과를 최종 확정(Commit)
-        if (ok_pressed) {
+        // TFT OK 터치 또는 물리 btnR(T17) 누름 -> 현재 검증 결과를 최종 확정(Commit)
+        int ok_event = ok_pressed || btnR_pressed;
+        if (ok_event) {
             if (inferred_char != '?') {
                 char cipher_c = mode ? caesar_decode(inferred_char, shift)
                                      : caesar_encode(inferred_char, shift);
@@ -241,14 +275,18 @@ int main() {
             clear_tft_canvas();             // TFT 하드웨어 캔버스 초기화
             clear_vga_canvas();             // VGA 캔버스도 초기화
             inferred_char = '?';            // 검증 문자 초기화
-            display_drawing(VGA_BASE, inferred_char, plain_buf, cipher_buf, buf_len, shift, mode);
+            config_changed = 1;
         }
         
-        // TFT의 [CLR] 버튼 영역을 누르면 화면 지우기 및 검증 초기화
+        // TFT CLR 터치 -> 화면 지우기 및 검증 초기화
         if (clear_pressed) {
             clear_tft_canvas();             // TFT 하드웨어 캔버스 초기화
             clear_vga_canvas();             // VGA 캔버스도 초기화
             inferred_char = '?';            // 검증 문자 초기화
+            config_changed = 1;
+        }
+
+        if (config_changed) {
             display_drawing(VGA_BASE, inferred_char, plain_buf, cipher_buf, buf_len, shift, mode);
         }
         
