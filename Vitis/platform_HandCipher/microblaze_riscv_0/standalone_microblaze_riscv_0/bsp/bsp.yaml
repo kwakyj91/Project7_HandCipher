@@ -152,6 +152,10 @@ drv_info:
   HandCipher_EMNIST_NPU_0: None
   HandCipher_TFT_LCD_0: None
   HandCipher_VGA_0: None
+  axi_gpio_0:
+    driver: gpio
+    ip_name: axi_gpio
+    path: /opt/Xilinx/Vitis/2024.2/data/embeddedsw/XilinxProcessorIPLib/drivers/gpio_v4_12
   axi_uartlite_0:
     driver: uartlite
     ip_name: axi_uartlite

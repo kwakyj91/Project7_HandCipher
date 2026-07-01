@@ -244,8 +244,8 @@ CMAKE_STATIC_LINKER_FLAGS_RELWITHDEBINFO:STRING=
 //Path to a program.
 CMAKE_STRIP:FILEPATH=/opt/Xilinx/Vitis/2024.2/gnu/riscv/lin/riscv64-unknown-elf/bin/riscv64-unknown-elf-strip
 
-//The CMake toolchain file
-CMAKE_TOOLCHAIN_FILE:FILEPATH=/home/kwakyj91/workspace_ondevice_2/project/project_07/Project7_HandCipher/Vitis/platform_HandCipher/microblaze_riscv_0/standalone_microblaze_riscv_0/bsp/microblaze_riscv_toolchain.cmake
+//No help, variable specified on the command line.
+CMAKE_TOOLCHAIN_FILE:UNINITIALIZED=/home/kwakyj91/workspace_ondevice_2/project/project_07/Project7_HandCipher/Vitis/platform_HandCipher/microblaze_riscv_0/standalone_microblaze_riscv_0/bsp/microblaze_riscv_toolchain.cmake
 
 //If this value is on, makefiles will be generated without the
 // .SILENT directive, and all commands will be echoed to the console
@@ -312,6 +312,15 @@ common_IS_TOP_LEVEL:STATIC=OFF
 
 //Value Computed by CMake
 common_SOURCE_DIR:STATIC=/home/kwakyj91/workspace_ondevice_2/project/project_07/Project7_HandCipher/Vitis/platform_HandCipher/microblaze_riscv_0/standalone_microblaze_riscv_0/bsp/libsrc/common/src
+
+//Value Computed by CMake
+gpio_BINARY_DIR:STATIC=/home/kwakyj91/workspace_ondevice_2/project/project_07/Project7_HandCipher/Vitis/platform_HandCipher/microblaze_riscv_0/standalone_microblaze_riscv_0/bsp/libsrc/build_configs/gen_bsp/libsrc/gpio/src
+
+//Value Computed by CMake
+gpio_IS_TOP_LEVEL:STATIC=OFF
+
+//Value Computed by CMake
+gpio_SOURCE_DIR:STATIC=/home/kwakyj91/workspace_ondevice_2/project/project_07/Project7_HandCipher/Vitis/platform_HandCipher/microblaze_riscv_0/standalone_microblaze_riscv_0/bsp/libsrc/gpio/src
 
 //Value Computed by CMake
 libxil_BINARY_DIR:STATIC=/home/kwakyj91/workspace_ondevice_2/project/project_07/Project7_HandCipher/Vitis/platform_HandCipher/microblaze_riscv_0/standalone_microblaze_riscv_0/bsp/libsrc/build_configs/gen_bsp/libsrc
@@ -511,7 +520,7 @@ CMAKE_MODULE_LINKER_FLAGS_RELWITHDEBINFO-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_NM
 CMAKE_NM-ADVANCED:INTERNAL=1
 //number of local generators
-CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=11
+CMAKE_NUMBER_OF_MAKEFILES:INTERNAL=12
 //ADVANCED property for variable: CMAKE_OBJCOPY
 CMAKE_OBJCOPY-ADVANCED:INTERNAL=1
 //ADVANCED property for variable: CMAKE_OBJDUMP

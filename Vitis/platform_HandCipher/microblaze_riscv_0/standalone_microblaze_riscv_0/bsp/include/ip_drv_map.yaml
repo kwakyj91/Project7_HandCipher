@@ -7,6 +7,9 @@ HandCipher_TFT_LCD_0:
 HandCipher_VGA_0:
 - HandCipher_VGA
 - None
+axi_gpio_0:
+- axi_gpio
+- gpio
 axi_uartlite_0:
 - axi_uartlite
 - uartlite

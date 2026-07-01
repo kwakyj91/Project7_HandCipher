@@ -1,7 +1,7 @@
 {
   "design": {
     "design_info": {
-      "boundary_crc": "0x829F7D04AB059DCC",
+      "boundary_crc": "0xA0CF25949D90C54C",
       "device": "xc7a35tcpg236-1",
       "gen_directory": "../../../../HandCipher.gen/sources_1/bd/HandCipher",
       "name": "HandCipher",
@@ -27,7 +27,8 @@
         "dlmb_bram_if_cntlr": "",
         "ilmb_bram_if_cntlr": "",
         "lmb_bram": ""
-      }
+      },
+      "axi_gpio_0": ""
     },
     "interface_ports": {
       "usb_uart": {
@@ -42,6 +43,32 @@
           "TxD": {
             "physical_name": "usb_uart_txd",
             "direction": "O"
+          }
+        }
+      },
+      "push_buttons_4bits": {
+        "mode": "Master",
+        "vlnv_bus_definition": "xilinx.com:interface:gpio:1.0",
+        "vlnv": "xilinx.com:interface:gpio_rtl:1.0",
+        "port_maps": {
+          "TRI_I": {
+            "physical_name": "push_buttons_4bits_tri_i",
+            "direction": "I",
+            "left": "3",
+            "right": "0"
+          }
+        }
+      },
+      "dip_switches_16bits": {
+        "mode": "Master",
+        "vlnv_bus_definition": "xilinx.com:interface:gpio:1.0",
+        "vlnv": "xilinx.com:interface:gpio_rtl:1.0",
+        "port_maps": {
+          "TRI_I": {
+            "physical_name": "dip_switches_16bits_tri_i",
+            "direction": "I",
+            "left": "15",
+            "right": "0"
           }
         }
       }
@@ -216,7 +243,7 @@
         "inst_hier_path": "axi_smc",
         "parameters": {
           "NUM_MI": {
-            "value": "4"
+            "value": "5"
           },
           "NUM_SI": {
             "value": "1"
@@ -239,7 +266,8 @@
               "M00_AXI",
               "M01_AXI",
               "M02_AXI",
-              "M03_AXI"
+              "M03_AXI",
+              "M04_AXI"
             ]
           },
           "M00_AXI": {
@@ -318,6 +346,31 @@
             }
           },
           "M03_AXI": {
+            "mode": "Master",
+            "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
+            "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
+            "parameters": {
+              "NUM_READ_OUTSTANDING": {
+                "value": "1"
+              },
+              "NUM_READ_THREADS": {
+                "value": "1"
+              },
+              "NUM_WRITE_OUTSTANDING": {
+                "value": "1"
+              },
+              "NUM_WRITE_THREADS": {
+                "value": "1"
+              },
+              "RUSER_BITS_PER_BYTE": {
+                "value": "0"
+              },
+              "WUSER_BITS_PER_BYTE": {
+                "value": "0"
+              }
+            }
+          },
+          "M04_AXI": {
             "mode": "Master",
             "vlnv_bus_definition": "xilinx.com:interface:aximm:1.0",
             "vlnv": "xilinx.com:interface:aximm_rtl:1.0",
@@ -647,9 +700,39 @@
             ]
           }
         }
+      },
+      "axi_gpio_0": {
+        "vlnv": "xilinx.com:ip:axi_gpio:2.0",
+        "ip_revision": "35",
+        "xci_name": "HandCipher_axi_gpio_0_0",
+        "xci_path": "ip/HandCipher_axi_gpio_0_0/HandCipher_axi_gpio_0_0.xci",
+        "inst_hier_path": "axi_gpio_0",
+        "parameters": {
+          "GPIO2_BOARD_INTERFACE": {
+            "value": "dip_switches_16bits"
+          },
+          "GPIO_BOARD_INTERFACE": {
+            "value": "push_buttons_4bits"
+          },
+          "USE_BOARD_FLOW": {
+            "value": "true"
+          }
+        }
       }
     },
     "interface_nets": {
+      "axi_gpio_0_GPIO": {
+        "interface_ports": [
+          "push_buttons_4bits",
+          "axi_gpio_0/GPIO"
+        ]
+      },
+      "axi_gpio_0_GPIO2": {
+        "interface_ports": [
+          "dip_switches_16bits",
+          "axi_gpio_0/GPIO2"
+        ]
+      },
       "axi_smc_M00_AXI": {
         "interface_ports": [
           "axi_smc/M00_AXI",
@@ -672,6 +755,12 @@
         "interface_ports": [
           "axi_smc/M03_AXI",
           "axi_uartlite_0/S_AXI"
+        ]
+      },
+      "axi_smc_M04_AXI": {
+        "interface_ports": [
+          "axi_smc/M04_AXI",
+          "axi_gpio_0/S_AXI"
         ]
       },
       "axi_uartlite_0_UART": {
@@ -856,7 +945,8 @@
           "blk_mem_gen_0/clka",
           "blk_mem_gen_0/clkb",
           "microblaze_riscv_0/Clk",
-          "microblaze_riscv_0_local_memory/LMB_Clk"
+          "microblaze_riscv_0_local_memory/LMB_Clk",
+          "axi_gpio_0/s_axi_aclk"
         ]
       },
       "proc_sys_reset_0_bus_struct_reset": {
@@ -878,7 +968,8 @@
           "axi_smc/aresetn",
           "HandCipher_TFT_LCD_0/S_AXI_ARESETN",
           "HandCipher_VGA_0/S_AXI_ARESETN",
-          "axi_uartlite_0/s_axi_aresetn"
+          "axi_uartlite_0/s_axi_aresetn",
+          "axi_gpio_0/s_axi_aresetn"
         ]
       },
       "reset_1": {
@@ -920,6 +1011,11 @@
                 "address_block": "/HandCipher_VGA_0/S_AXI/reg0",
                 "offset": "0x00021000",
                 "range": "4K"
+              },
+              "SEG_axi_gpio_0_Reg": {
+                "address_block": "/axi_gpio_0/S_AXI/Reg",
+                "offset": "0x40000000",
+                "range": "64K"
               },
               "SEG_axi_uartlite_0_Reg": {
                 "address_block": "/axi_uartlite_0/S_AXI/Reg",

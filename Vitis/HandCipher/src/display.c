@@ -90,7 +90,7 @@ void display_drawing(u32 base, char inferred, char *plain, char *cipher, int len
         vga_putchar(base, 24, 13 + i, ' ', CYAN, BLACK);
     }
 
-    vga_puts(base, 29, 0, "UART: +,- Shift / M Mode / R Reset", GRAY, BLACK);
+    vga_puts(base, 29, 0, "btnU/D:Shift  sw15:Mode  sw0:Reset", GRAY, BLACK);
 }
 
 // CONFIRMING 상태 화면 (레거시 지원용 스텁)
