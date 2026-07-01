@@ -11,11 +11,11 @@ EMNIST NPU, VGA, TFT-LCD를 각각 AXI Custom IP로 패키징해 Vivado Block De
 - **RTL (Custom IP)**: NPU 추론, VGA 신호 생성, ILI9341/XPT2046 SPI 제어
 - **C 소프트웨어 (Vitis)**: 카이사르 암호화/복호화, 화면 구성, 버튼/스위치 처리, 모드 제어
 
-## 현재 진행 상태 (2026-07-01 기준)
+## 현재 진행 상태 (2026-07-02 기준)
 
-## 2026-06-30 TOP/Vitis Integration Status Update
+## 2026-07-02 TOP/Vitis Final Integration Status Update
 
-현재 TOP Vivado Block Design과 Vitis 연결성 검증까지 진행됐다. IP_TEST 단독 RTL 검증 이후, TOP 프로젝트에서 MicroBlaze V(RISC-V), NPU/TFT/VGA AXI Custom IP, UARTLite, local memory를 통합했고 Vitis bare-metal 애플리케이션에서 AXI 접근을 확인했다.
+현재 TOP Vivado Block Design, Vitis 최종 앱 구현, Basys3 보드 동작 검증까지 완료됐다. IP_TEST 단독 RTL 검증 이후, TOP 프로젝트에서 MicroBlaze V(RISC-V), NPU/TFT/VGA AXI Custom IP, AXI GPIO, UARTLite, local memory를 통합했고 Vitis bare-metal 애플리케이션에서 최종 UI/암호화 플로우를 구동한다.
 
 ### 완료된 통합 작업
 
@@ -27,11 +27,13 @@ EMNIST NPU, VGA, TFT-LCD를 각각 AXI Custom IP로 패키징해 Vivado Block De
   - NPU: `0x0002_0000 ~ 0x0002_0FFF`
   - VGA: `0x0002_1000 ~ 0x0002_1FFF`
   - TFT-LCD: `0x0003_0000 ~ 0x0003_0FFF`
+  - AXI GPIO: `0x4000_0000 ~ 0x4000_FFFF`
   - UARTLite: `0x4060_0000 ~ 0x4060_FFFF`
-- `Vitis/HandCipher/src/helloworld.c`를 자동 연결성 테스트 앱으로 변경
-  - NPU CTRL readback 확인
-  - TFT CTRL enable 및 STATUS read 확인
-  - VGA CTRL enable, CANVAS_MODE readback, 문자 버퍼/캔버스 write smoke test 수행
+- `Vitis/HandCipher/src/handcipher.c`를 최종 HandCipher 앱으로 구성
+  - TFT `touch_valid` 동안 캔버스 픽셀을 VGA 프리뷰 버퍼로 실시간 전송
+  - `USE_SOFTWARE_NPU=1`로 소프트웨어 MLP 추론 수행
+  - TFT OK로 추론 문자 commit, TFT CLR로 캔버스 초기화
+  - btnU/D shift 변경, btnL 전체 초기화, btnR 공백 삽입, SW0 reset, SW15 mode 전환 처리
 
 ### 최종 UART 연결성 검증 결과
 
@@ -54,17 +56,13 @@ RESULT NPU=OK TFT=OK VGA=OK
 
 ### 현재 남은 주요 작업
 
-- Vitis 테스트 앱을 최종 HandCipher 앱으로 확장
-  - TFT OK/CLEAR 또는 보드 버튼 입력 처리
-  - NPU start/status/result 플로우 연결
-  - VGA UI 화면 구성 및 카이사르 암호화/복호화 버퍼 관리
 - RTL NPU 정확도 문제는 별도 보류
   - 학습/export 데이터 자체는 정상이나, RTL NPU는 시뮬레이션에서 Python 정수 모델과 결과가 맞지 않았음
-  - 최종 데모 신뢰성을 위해 필요하면 Vitis 소프트웨어 추론 또는 RTL NPU 타이밍 수정 중 하나를 선택해야 함
+  - 최종 데모는 `USE_SOFTWARE_NPU=1` 소프트웨어 추론으로 우회해 보드 동작 검증을 완료함
 
 ---
 
-현재 저장소 기준으로 **Phase 1 학습 파이프라인**, **Phase 2 IP_TEST RTL 구현/시뮬레이션 검증**, 그리고 **TOP/Vitis 기본 AXI 연결성 검증**까지 완료 상태다.
+현재 저장소 기준으로 **Phase 1 학습 파이프라인**, **Phase 2 IP_TEST RTL 구현/시뮬레이션 검증**, **Phase 3 TOP 통합**, **Phase 4 Vitis 최종 앱 구현**, **Phase 5 하드웨어 검증**까지 완료 상태다.
 
 - 완료:
   - EMNIST 학습/양자화/export 및 정수 정확도 검증
@@ -72,27 +70,26 @@ RESULT NPU=OK TFT=OK VGA=OK
   - `canvas_display.v`, `draw_canvas.v`, `tft_axi.v`, `tb_tft.v`
   - `font_rom.v`, `vga_ctrl.v`, `vga_axi.v`, `tb_font_rom.v`, `tb_vga.v`, `tb_vga_axi.v`
   - `Vivado/IP_TEST/IP_TEST.xpr`에 주요 RTL/시뮬레이션 파일 등록
+  - `Vitis/HandCipher/src/handcipher.c` 최종 앱 구현 및 보드 검증
 - 미완료/확인 필요:
-  - TOP/Vitis 기본 AXI 연결성은 통과했지만 최종 HandCipher 앱 로직은 아직 테스트 앱 수준
   - NPU RTL 결과가 Python 정수 모델과 불일치하는 문제는 보류 상태
-  - TFT 터치 좌표/OK/CLEAR sticky flag의 XPT2046 bitstream 기반 시뮬레이션 보강은 남아 있음
-  - 최종 UI/카이사르 암호화/복호화 Vitis 앱 구현 및 보드 검증 필요
+  - TFT 터치 좌표/OK/CLEAR sticky flag의 XPT2046 bitstream 기반 시뮬레이션 보강은 선택 보강 사항
 
 **시스템 흐름:**
 
 ```
-[DRAWING]    글자 그리기 (TFT 캔버스)
-     ↓ OK (btnC 또는 터치 OK버튼)
-[INFERRING]  NPU 추론 실행 → MicroBlaze가 캔버스 픽셀 784개를 TFT IP에서 읽어 VGA IP에 전달
-     ↓ done (~157μs)
-[CONFIRMING] VGA에 손글씨 프리뷰 + "NPU Result: X" + btnC=CONFIRM / btnL=RETRY 표시
-             TFT 캔버스는 그대로 유지
-     ↓ btnC/터치OK=확인        ↓ btnL/터치CLEAR=재시도
-[CONFIRMED]                  [DRAWING으로 복귀 + 캔버스 CLEAR]
-  Caesar 암호화 → VGA 버퍼 추가
+[DRAWING]    TFT 캔버스에 글자 입력
+     ↓ touch_valid
+[PREVIEW]    MicroBlaze가 TFT 캔버스 784픽셀을 VGA preview buffer로 복사
+             `USE_SOFTWARE_NPU=1`이면 handcipher.c에서 소프트웨어 MLP 실시간 추론
+             VGA에 손글씨 프리뷰 + "NPU Result: X" 표시
+     ↓ TFT OK                         ↓ TFT CLR
+[COMMIT]                          [CLEAR]
+  inferred_char를 plain_buf에 추가     캔버스/VGA preview/현재 추론 문자 초기화
+  mode/shift에 따라 cipher_buf 갱신
   캔버스 CLEAR → 다음 글자 대기
 
-[복호화] SW[14]=1 → 버퍼 내 암호문 C코드 역변환 → VGA IP 출력
+[모드 전환] SW15=0/1 → ENCRYPT/DECRYPT 전환, 기존 버퍼를 plain_buf 기준으로 즉시 재계산
 ```
 
 ---
@@ -104,12 +101,14 @@ RESULT NPU=OK TFT=OK VGA=OK
 | ILI9341 (240×320, PMOD) | 글자 그리기 캔버스 + 터치 버튼 UI            |
 | XPT2046 (PMOD 공유)      | 터치 좌표 입력                                |
 | VGA 모니터 (640×480)    | 텍스트/결과 출력                              |
-| btnC                     | OK (NPU 추론 트리거) — 터치 OK버튼과 동일    |
-| btnL                     | CLEAR (캔버스 초기화) — 터치 CLEAR버튼과 동일|
-| btnR                     | 버퍼 초기화                                   |
-| SW[4:0]                  | 카이사르 시프트 값 (0~25)                     |
-| SW[14]                   | 0=암호화, 1=복호화                            |
-| SW[15]                   | 전체 리셋                                     |
+| btnU                     | Shift +1                                     |
+| btnD                     | Shift -1                                     |
+| btnL                     | 캔버스 + 버퍼 전체 초기화                    |
+| btnR                     | 공백 문자 삽입                               |
+| TFT OK                   | 추론 결과 확정 (Commit)                      |
+| TFT CLR                  | 캔버스 지우기                                |
+| SW0                      | 전체 리셋 (shift=3, 버퍼 초기화)             |
+| SW15                     | 0=암호화, 1=복호화                            |
 
 **TFT LCD 화면 레이아웃 (240×320 portrait):**
 
@@ -167,7 +166,9 @@ RESULT NPU=OK TFT=OK VGA=OK
 | 캔버스 BRAM (28×28, 공유)    | 1                  |
 | VGA 문자 버퍼 (40×30)        | 1                  |
 | VGA 폰트 ROM (16×16 × 128)  | 2                  |
-| **합계(추정)**                | **94 / 100** |
+| **합계(초기 추정)**           | **94 / 100** |
+
+최종 TOP 구현 리포트 기준으로는 Block RAM Tile/RAMB36 사용량이 **33 / 50 (66%)**이다.
 
 ---
 
@@ -344,7 +345,7 @@ output        done
 - 784비트 = 32비트 레지스터 25개 → **BRAM 불필요 (LUT 기반)**
 - CANVAS_WR_EN 펄스로 1비트씩 기록, vga_ctrl이 픽셀 클록에 동기로 읽기
 
-**CONFIRMING 상태 VGA 화면 (CANVAS_MODE=1):**
+**현재 VGA 프리뷰 화면 (CANVAS_MODE=1):**
 
 ```
 +-------------------- 640px ---------------------+
@@ -353,8 +354,8 @@ output        done
 |                                                |
 | +----------+   NPU Result : B                 | row 5
 | |          |                                  |
-| | 28×28    |   btnC = CONFIRM                 | row 8
-| | 손글씨   |   btnL = RETRY                   | row 10
+| | 28×28    |   TFT OK  = COMMIT               | row 8
+| | 손글씨   |   TFT CLR = CLEAR                | row 10
 | | 프리뷰   |                                  |
 | | (224×224)|                                  |
 | +----------+                                  | row 17
@@ -424,184 +425,63 @@ output        canvas_ena
 
 ## Part 3: Vitis C 소프트웨어
 
-### `main.c`
+### 실제 빌드 소스
 
-```c
-#include "xparameters.h"
-#include "xgpio.h"
-#include "caesar.h"
-#include "display.h"
+`Vitis/HandCipher/src/UserConfig.cmake` 기준 실제 빌드 소스는 다음과 같다.
 
-#define NPU_BASE   XPAR_NPU_IP_0_BASEADDR
-#define VGA_BASE   XPAR_VGA_IP_0_BASEADDR
-#define TFT_BASE   XPAR_TFT_IP_0_BASEADDR
-
-#define NPU_CTRL         (NPU_BASE + 0x00)
-#define NPU_STATUS       (NPU_BASE + 0x04)
-#define NPU_RESULT       (NPU_BASE + 0x08)
-#define TFT_STATUS       (TFT_BASE + 0x0C)
-#define TFT_CANVAS_ADDR  (TFT_BASE + 0x10)
-#define TFT_CANVAS_DATA  (TFT_BASE + 0x14)
-#define VGA_CANVAS_ADDR  (VGA_BASE + 0x18)
-#define VGA_CANVAS_DATA  (VGA_BASE + 0x1C)
-#define VGA_CANVAS_EN    (VGA_BASE + 0x20)
-#define VGA_CANVAS_MODE  (VGA_BASE + 0x24)
-
-// AXI GPIO 비트마스크 (채널 1: 버튼)
-// reset_p(U18)=center, btnL(W19), btnR(T17) — GPIO 비트 위치는 XDC 순서와 일치
-#define BTN_C  0x01   // center (reset_p)
-#define BTN_L  0x02   // left
-#define BTN_R  0x04   // right
-
-typedef enum { DRAWING, CONFIRMING } State;
-
-char plain_buf[64]  = {0};
-char cipher_buf[64] = {0};
-int  buf_len = 0;
-
-// NPU 추론 후 캔버스 픽셀 784개를 TFT IP에서 읽어 VGA IP에 전송
-void transfer_canvas_to_vga() {
-    for (int i = 0; i < 784; i++) {
-        Xil_Out32(TFT_CANVAS_ADDR, i);
-        u32 px = Xil_In32(TFT_CANVAS_DATA) & 0x1;
-        Xil_Out32(VGA_CANVAS_ADDR, i);
-        Xil_Out32(VGA_CANVAS_DATA, px);
-        Xil_Out32(VGA_CANVAS_EN, 1);
-    }
-}
-
-int main() {
-    XGpio gpio;
-    XGpio_Initialize(&gpio, XPAR_AXI_GPIO_0_DEVICE_ID);
-
-    State state = DRAWING;
-    char inferred_char = '?';
-    display_drawing(VGA_BASE, plain_buf, cipher_buf, buf_len, 0, 0);
-
-    while (1) {
-        u32 sw  = XGpio_DiscreteRead(&gpio, 2);
-        u32 btn = XGpio_DiscreteRead(&gpio, 1);
-        int shift = sw & 0x1F;
-        int mode  = (sw >> 14) & 0x1;
-
-        u32 tft_st    = Xil_In32(TFT_STATUS);
-        int touch_ok    = (tft_st >> 2) & 0x1;
-        int touch_clear = (tft_st >> 3) & 0x1;
-
-        if (state == DRAWING) {
-            if ((btn & BTN_C) || touch_ok) {
-                // NPU 추론
-                Xil_Out32(NPU_CTRL, 1);
-                while (!(Xil_In32(NPU_STATUS) & 0x1));
-                inferred_char = 'A' + (Xil_In32(NPU_RESULT) & 0x1F);
-
-                // 캔버스 픽셀 VGA로 전송 후 프리뷰 모드 진입
-                transfer_canvas_to_vga();
-                Xil_Out32(VGA_CANVAS_MODE, 1);
-                display_confirming(VGA_BASE, inferred_char, shift, mode,
-                                   plain_buf, cipher_buf, buf_len);
-                state = CONFIRMING;
-            }
-            if ((btn & BTN_L) || touch_clear)
-                Xil_Out32(TFT_BASE + 0x00, 0x2);  // 캔버스 CLEAR
-
-            if (btn & BTN_R) {
-                buf_len = 0;
-                display_drawing(VGA_BASE, plain_buf, cipher_buf, buf_len, shift, mode);
-            }
-
-        } else {  // CONFIRMING
-            if ((btn & BTN_C) || touch_ok) {
-                // 확인: 암호화 후 버퍼에 추가
-                char cipher_c = mode ? caesar_decode(inferred_char, shift)
-                                     : caesar_encode(inferred_char, shift);
-                if (buf_len < 64) {
-                    plain_buf[buf_len]  = inferred_char;
-                    cipher_buf[buf_len] = cipher_c;
-                    buf_len++;
-                }
-                Xil_Out32(VGA_CANVAS_MODE, 0);
-                Xil_Out32(TFT_BASE + 0x00, 0x2);  // 캔버스 CLEAR
-                display_drawing(VGA_BASE, plain_buf, cipher_buf, buf_len, shift, mode);
-                state = DRAWING;
-
-            } else if ((btn & BTN_L) || touch_clear) {
-                // 재시도: 캔버스 지우고 다시 그리기
-                Xil_Out32(VGA_CANVAS_MODE, 0);
-                Xil_Out32(TFT_BASE + 0x00, 0x2);
-                display_drawing(VGA_BASE, plain_buf, cipher_buf, buf_len, shift, mode);
-                state = DRAWING;
-            }
-        }
-    }
-}
+```cmake
+set(USER_COMPILE_SOURCES
+    "platform.c"
+    "handcipher.c"
+    "caesar.c"
+    "display.c"
+)
 ```
 
----
+### `handcipher.c` 최종 앱 구조
+
+```c
+#define NPU_BASE   XPAR_HANDCIPHER_EMNIST_NPU_0_BASEADDR
+#define VGA_BASE   XPAR_HANDCIPHER_VGA_0_BASEADDR
+#define TFT_BASE   XPAR_HANDCIPHER_TFT_LCD_0_BASEADDR
+
+#define USE_SOFTWARE_NPU 1
+```
+
+- `USE_SOFTWARE_NPU=1`로 TFT 캔버스 픽셀을 읽어 Vitis C 코드에서 MLP(784 → 64 → 26) 추론을 수행한다.
+- 하드웨어 NPU 경로는 `USE_SOFTWARE_NPU=0`일 때 `NPU_CTRL`, `NPU_STATUS`, `NPU_RESULT`로 사용할 수 있게 남겨둔다.
+- `transfer_canvas_to_vga()`는 TFT `CANVAS_RD_*`에서 784픽셀을 읽어 VGA `CANVAS_WR_*` 프리뷰 버퍼로 복사한다.
+- VGA `CANVAS_MODE`는 상시 1로 두고, 왼쪽에는 손글씨 프리뷰, 오른쪽에는 현재 추론 결과와 상태 문구를 표시한다.
+- TFT OK는 현재 `inferred_char`를 `plain_buf`에 commit하고, mode/shift에 따라 `cipher_buf`를 갱신한다.
+- TFT CLR은 TFT/VGA 캔버스와 현재 추론 문자를 초기화한다.
+- btnU/D는 shift를 변경하고 기존 버퍼를 즉시 재계산한다.
+- btnL은 캔버스와 버퍼 전체를 초기화한다.
+- btnR은 공백 문자를 삽입한다.
+- SW0은 전체 리셋, SW15는 ENCRYPT/DECRYPT 모드 전환이다.
 
 ### `caesar.c` / `caesar.h`
 
 ```c
 char caesar_encode(char c, int shift) {
-    return 'A' + (c - 'A' + shift) % 26;
+    if (c >= 'A' && c <= 'Z')
+        return 'A' + (c - 'A' + shift) % 26;
+    return c;
 }
 
 char caesar_decode(char c, int shift) {
-    return 'A' + (c - 'A' + 26 - shift) % 26;
+    if (c >= 'A' && c <= 'Z')
+        return 'A' + (c - 'A' + 26 - shift) % 26;
+    return c;
 }
 ```
 
----
+공백 등 알파벳이 아닌 문자는 그대로 유지한다.
 
 ### `display.c` / `display.h`
 
-VGA IP에 문자 기록하는 헬퍼 함수
-
-```c
-// 기본 출력
-void vga_putchar(u32 base, int row, int col, char c, u32 fg, u32 bg);
-void vga_puts(u32 base, int row, int col, const char *str, u32 fg, u32 bg);
-void vga_clear(u32 base);
-
-// DRAWING 상태 화면 (일반 텍스트 모드)
-void display_drawing(u32 base, char *plain, char *cipher,
-                     int len, int shift, int mode) {
-    char line[82];
-    vga_clear(base);
-    vga_puts(base, 0, 20, "=== CAESAR CIPHER SYSTEM ===", WHITE, DARK_BLUE);
-    sprintf(line, "MODE: %-9s  SHIFT: +%d",
-            mode ? "DECRYPT" : "ENCRYPT", shift);
-    vga_puts(base, 2, 0, line, CYAN, BLACK);
-
-    plain[len] = '\0'; cipher[len] = '\0';
-    sprintf(line, "Plaintext  : %-64s", plain);
-    vga_puts(base, 36, 0, line, GREEN, BLACK);
-    sprintf(line, "Ciphertext : %-64s", cipher);
-    vga_puts(base, 37, 0, line, CYAN, BLACK);
-
-    vga_puts(base, 58, 0,
-             "btnC=OK  btnL=CLR  btnR=BUF_CLR  SW[4:0]=SHIFT  SW[14]=MODE",
-             GRAY, BLACK);
-}
-
-// CONFIRMING 상태 화면 (캔버스 프리뷰 모드, CANVAS_MODE=1)
-// canvas_buf는 VGA IP가 직접 렌더링, 여기서는 텍스트 영역만 기록
-void display_confirming(u32 base, char inferred, int shift, int mode,
-                        char *plain, char *cipher, int len) {
-    char line[82];
-    // 헤더/모드는 그대로 유지
-    sprintf(line, "NPU Result : %c", inferred);
-    vga_puts(base, 6, 30, line, YELLOW, BLACK);
-    vga_puts(base, 10, 30, "Press btnC = CONFIRM", GREEN, BLACK);
-    vga_puts(base, 12, 30, "Press btnL = RETRY",  RED,   BLACK);
-
-    plain[len] = '\0'; cipher[len] = '\0';
-    sprintf(line, "Plaintext  : %-40s", plain);
-    vga_puts(base, 36, 0, line, GREEN, BLACK);
-    sprintf(line, "Ciphertext : %-40s", cipher);
-    vga_puts(base, 37, 0, line, CYAN, BLACK);
-}
-```
+- `vga_putchar()`, `vga_puts()`, `vga_clear()`가 VGA AXI 문자 버퍼에 직접 기록한다.
+- `display_drawing()`은 현재 mode/shift, 실시간 NPU 결과, plain/cipher 버퍼, 조작 안내를 출력한다.
+- `display_confirming()`은 현재 구현에서는 레거시 호환용 스텁이며 `display_drawing()`을 호출한다.
 
 ---
 
@@ -677,7 +557,7 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
       - ~~Port A: `tft_ip`의 `canvas_addra/dina/wea/ena`에 배선~~ ✅
       - ~~Port B: `npu_ip`의 `canvas_addrb/enb/doutb`에 배선~~ ✅
 21. ~~`basys3.xdc` 핀 제약 추가~~ ✅ (`Basys-3-Master.xdc`)
-22. ~~합성 + 구현~~ ✅ **BRAM36: 33/50 (66%), WNS = +0.387ns** (예상 94 BRAM18보다 훨씬 적음)
+22. ~~합성 + 구현~~ ✅ **Block RAM Tile/RAMB36: 33/50 (66%), WNS = +0.118ns** (초기 예상 94 BRAM18보다 훨씬 적음)
 23. ~~**File → Export → Export Hardware** → `handcipher.xsa` 생성~~ ✅ (`HandCipher_wrapper.xsa`)
 
 ### Phase 4 — Vitis C 코드 (Vitis/) ✅ 완료
@@ -685,7 +565,7 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 24. Vitis에서 handcipher.xsa로 Platform 프로젝트 생성 ✅ (Vitis/platform_HandCipher 존재)
 25. Application 프로젝트 생성 → caesar.c / caesar.h ✅ (완료)
 26. display.c / display.h ✅ (완료)
-27. main.c (helloworld.c) ✅ (완료, FSM 및 화면 제어 연결)
+27. handcipher.c ✅ (완료, 실시간 프리뷰/소프트웨어 추론/버튼·스위치 제어 연결)
 28. 빌드 + Basys3에 Program Device ✅
     - AXI GPIO (버튼/스위치) 정상 동작 확인 — btnU/btnD(Shift), btnL(CLR), SW0(Reset), SW15(Mode)
     - 소프트웨어 NPU 추론 사용 (`USE_SOFTWARE_NPU=1`, 하드웨어 RTL NPU 정확도 문제로 우회)
@@ -707,7 +587,7 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 | NPU IP       | AXI start → done, RESULT 0~25           |
 | VGA IP       | 640×480 @ 60Hz, 문자 정상 출력          |
 | TFT IP       | 터치 → 캔버스 BRAM 정상 기록            |
-| Block Design | 합성 BRAM18 ≤50, WNS ≥ 0               |
+| Block Design | Block RAM Tile/RAMB36 ≤50, WNS ≥ 0    |
 | C 코드       | H→K(shift=3), K→H(decrypt) 정상        |
 | 하드웨어     | 글자 그리기 → OK → VGA 결과 (3초 이내) |
 
@@ -722,7 +602,7 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 | 화면 구성   | text_buffer.v    | display.c (printf 수준) |
 | 디버깅      | XSim 시뮬레이션  | UART printf 가능        |
 | IP 구조     | 단일 top.v       | 3× Custom IP + BD      |
-| BRAM        | 31 / 100         | 46 / 100                |
+| BRAM        | 31 / 100         | RAMB36 33 / 50          |
 | Vivado 작업 | RTL only         | RTL + Block Design      |
 | Vitis 작업  | 없음             | C 코드 작성             |
 
@@ -730,37 +610,71 @@ void display_confirming(u32 base, char inferred, int shift, int mode,
 
 ## 추가 개선 계획
 
-### btnR — 마지막 문자 삭제 기능으로 변경 ✅ 완료
+### btnR — 공백 삽입 기능으로 변경 ✅ 완료
 
 **변경 내용:** `Vitis/HandCipher/src/handcipher.c`
 
 ```c
-// ok_event에서 btnR 제거
-int ok_event = ok_pressed;
-
-// btnR: 마지막 문자 삭제 (Backspace)
+// btnR: 공백 문자 삽입 (Space)
 if (btnR_pressed) {
-    if (buf_len > 0) {
-        buf_len--;
+    if (buf_len < 64) {
+        plain_buf[buf_len]  = ' ';
+        cipher_buf[buf_len] = ' ';
+        buf_len++;
         config_changed = 1;
     }
 }
 ```
 
-> `plain_buf[buf_len] = '\0'` 불필요 — `display_drawing`이 출력 전 `plain[len] = '\0'` 처리하므로 `buf_len--`만으로 충분.
+> 공백은 암호화/복호화 대상이 아니므로 plain/cipher 양쪽 모두 `' '`로 저장.
 
-**버튼 역할 최종 정리 (변경 후):**
+---
+
+### SW15 / btnU / btnD — 기존 버퍼 실시간 재계산 ✅ 완료
+
+**변경 내용:** `Vitis/HandCipher/src/handcipher.c`
+
+mode 또는 shift가 바뀔 때 이미 입력된 `plain_buf` 전체를 새 mode/shift로 재처리해 `cipher_buf`를 갱신한다.
+
+```c
+// SW15 mode 전환 시
+if (new_mode != mode) {
+    mode = new_mode;
+    for (int i = 0; i < buf_len; i++) {
+        cipher_buf[i] = mode ? caesar_decode(plain_buf[i], shift)
+                             : caesar_encode(plain_buf[i], shift);
+    }
+    config_changed = 1;
+}
+
+// btnU / btnD shift 변경 시 (동일 패턴)
+if (btnU_pressed) {
+    shift = (shift + 1) % 26;
+    for (int i = 0; i < buf_len; i++) {
+        cipher_buf[i] = mode ? caesar_decode(plain_buf[i], shift)
+                             : caesar_encode(plain_buf[i], shift);
+    }
+    config_changed = 1;
+}
+```
+
+> `plain_buf`는 항상 원본(추론 결과)을 보존하므로 재계산 기준으로 사용 가능.  
+> SW0 리셋은 `buf_len = 0`으로 버퍼를 비우므로 재계산 불필요.
+
+---
+
+**버튼 역할 최종 정리:**
 
 | 버튼 | 기능 |
 |------|------|
-| btnU | Shift +1 |
-| btnD | Shift -1 |
+| btnU | Shift +1 (기존 버퍼 즉시 재계산) |
+| btnD | Shift -1 (기존 버퍼 즉시 재계산) |
 | btnL | 캔버스 + 버퍼 전체 초기화 |
-| btnR | 버퍼 마지막 문자 1개 삭제 (Backspace) |
+| btnR | 공백 문자 삽입 (Space) |
 | TFT OK  | 추론 결과 확정 (Commit) |
 | TFT CLR | 캔버스 지우기 |
 | SW0  | 전체 리셋 (shift=3, 버퍼 초기화) |
-| SW15 | 모드 전환 (ENCRYPT ↔ DECRYPT) |
+| SW15 | 모드 전환 (ENCRYPT ↔ DECRYPT, 기존 버퍼 즉시 재계산) |
 
 ---
 
@@ -866,19 +780,18 @@ set_property -dict { PACKAGE_PIN W5   IOSTANDARD LVCMOS33 } [get_ports clk]
 create_clock -add -name sys_clk_pin -period 10.00 -waveform {0 5} [get_ports clk]
 
 ## Buttons
-set_property -dict { PACKAGE_PIN U18  IOSTANDARD LVCMOS33 } [get_ports reset_p]  ;# Center = OK / CONFIRM
+set_property -dict { PACKAGE_PIN U18  IOSTANDARD LVCMOS33 } [get_ports reset_p]  ;# Center/reset_p
 set_property -dict { PACKAGE_PIN T18  IOSTANDARD LVCMOS33 } [get_ports btnU]
 set_property -dict { PACKAGE_PIN W19  IOSTANDARD LVCMOS33 } [get_ports btnL]     ;# Left = CLEAR / RETRY
-set_property -dict { PACKAGE_PIN T17  IOSTANDARD LVCMOS33 } [get_ports btnR]     ;# Right = 버퍼 초기화
+set_property -dict { PACKAGE_PIN T17  IOSTANDARD LVCMOS33 } [get_ports btnR]     ;# Right = 공백 삽입
 set_property -dict { PACKAGE_PIN U17  IOSTANDARD LVCMOS33 } [get_ports btnD]
 
-## Switches  (SW[4:0]=shift, SW[14]=mode, SW[15]=reset)
+## Switches  (SW0=reset, SW15=mode, SW1~4 spare)
 set_property -dict { PACKAGE_PIN V17  IOSTANDARD LVCMOS33 } [get_ports {sw[0]}]
 set_property -dict { PACKAGE_PIN V16  IOSTANDARD LVCMOS33 } [get_ports {sw[1]}]
 set_property -dict { PACKAGE_PIN W16  IOSTANDARD LVCMOS33 } [get_ports {sw[2]}]
 set_property -dict { PACKAGE_PIN W17  IOSTANDARD LVCMOS33 } [get_ports {sw[3]}]
 set_property -dict { PACKAGE_PIN W15  IOSTANDARD LVCMOS33 } [get_ports {sw[4]}]
-set_property -dict { PACKAGE_PIN T1   IOSTANDARD LVCMOS33 } [get_ports {sw[14]}]
 set_property -dict { PACKAGE_PIN R2   IOSTANDARD LVCMOS33 } [get_ports {sw[15]}]
 
 ## VGA

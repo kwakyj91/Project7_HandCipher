@@ -200,6 +200,10 @@ int main() {
         // 스위치 및 물리 버튼 상태 변경 처리
         if (new_mode != mode) {
             mode = new_mode;
+            for (int i = 0; i < buf_len; i++) {
+                cipher_buf[i] = mode ? caesar_decode(plain_buf[i], shift)
+                                     : caesar_encode(plain_buf[i], shift);
+            }
             xil_printf("Mode changed via Switch: %s\r\n", mode ? "DECRYPT" : "ENCRYPT");
             config_changed = 1;
         }
@@ -218,12 +222,20 @@ int main() {
 
         if (btnU_pressed) {
             shift = (shift + 1) % 26;
+            for (int i = 0; i < buf_len; i++) {
+                cipher_buf[i] = mode ? caesar_decode(plain_buf[i], shift)
+                                     : caesar_encode(plain_buf[i], shift);
+            }
             xil_printf("Shift increased via Button U (T18): +%d\r\n", shift);
             config_changed = 1;
         }
 
         if (btnD_pressed) {
             shift = (shift + 25) % 26;
+            for (int i = 0; i < buf_len; i++) {
+                cipher_buf[i] = mode ? caesar_decode(plain_buf[i], shift)
+                                     : caesar_encode(plain_buf[i], shift);
+            }
             xil_printf("Shift decreased via Button D (U17): +%d\r\n", shift);
             config_changed = 1;
         }
@@ -239,11 +251,12 @@ int main() {
             config_changed = 1;
         }
 
-        if (btnR_pressed){
-            if(buf_len >  0)
-            {
-                buf_len--;
-                config_changed = 1;                
+        if (btnR_pressed) {
+            if (buf_len < 64) {
+                plain_buf[buf_len]  = ' ';
+                cipher_buf[buf_len] = ' ';
+                buf_len++;
+                config_changed = 1;
             }
         }
 
