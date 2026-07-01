@@ -1,41 +1,49 @@
-# 빌드 출력 디렉토리
-/build
-/export
-
-# 오브젝트 파일 및 의존성 파일
-*.o
-*.d
-
-# 로그 파일
-/logs
-*.log
-
-# 잠금 파일
-*.lock
-
-# 바이너리/이미지 파일
-*.bin
-*.pdi
-
-# Vitis 워크스페이스 설정
-.vitisWorkspace.json
-
-# IDE 내부 파일
-_ide/logs
-_ide/.wsdata
-_ide/.peers.ini
-
-# 비트스트림 및 하드웨어 바이너리 (Vivado 결과물)
-*.bit
-*.mmi
-
-# Vitis 툴 생성 디렉토리
-.rigel_lopper/
+# Vitis IDE/workspace generated files
 _ide/
 .Xil/
+.rigel_lopper/
+.vitisWorkspace.json
+.metadata/
+.analytics/
+.cache/
+**/.cache/
+**/.ninja_deps
+**/.ninja_log
 
-# Claude Code 내부 파일
+# Build/generated CMake and Ninja outputs
+/build/
+/export/
+**/build/
+**/build_configs/
+**/CMakeFiles/
+**/CMakeCache.txt
+**/cmake_install.cmake
+**/install_manifest.txt
+**/build.ninja
+**/rules.ninja
+**/compile_commands.json
+compile_commands.json
+
+# Objects, libraries, binaries, and hardware images
+*.o
+*.obj
+*.d
+*.a
+*.elf
+*.elf.size
+*.map
+*.bin
+*.pdi
+*.bit
+*.mmi
+a.out
+
+# Logs and locks
+/logs/
+logs/
+*.log
+*.lock
+
+# Local assistant/tooling files
 .claude/
-
-# CLAUDE.md
 CLAUDE.md
